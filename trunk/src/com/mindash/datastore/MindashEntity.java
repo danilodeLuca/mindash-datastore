@@ -48,9 +48,15 @@ public class MindashEntity {
     entity = new Entity(kind, name, parent); 
   }
   
-  // TODO[Tristan]: implement
+  /**
+   * This method just passes the <code>getAppId()</code> call
+   * to the underlying <code>Entity</code>.
+   * @return the identifier of the application that owns the underlying 
+   * <code>Entity</code>. This is simply a convenience method that forwards 
+   * to the <code>Key</code> for the underlying <code>Entity</code>. 
+   */
   public String getAppId(){
-    return null;
+    return entity.getAppId();
   }
   
   // TODO[Tristan]: implement
