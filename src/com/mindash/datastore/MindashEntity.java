@@ -32,18 +32,22 @@ public class MindashEntity {
   
   private Entity entity;
 
+  // TODO[Tristan]: implement
   public MindashEntity(String kind){
     entity = new Entity(kind);
   }
   
+  // TODO[Tristan]: implement
   public MindashEntity(String kind, Key parent){
     entity = new Entity(kind, parent);
   }
   
+  // TODO[Tristan]: implement
   public MindashEntity(String kind, String name){
     entity = new Entity(kind, name);
   }
   
+  // TODO[Tristan]: implement
   public MindashEntity(String kind, String name, Key parent){
     entity = new Entity(kind, name, parent); 
   }
@@ -56,6 +60,8 @@ public class MindashEntity {
    * to the <code>Key</code> for the underlying <code>Entity</code>. 
    */
   public String getAppId(){
+    // TODO[Tristan]: change this when implemented MindashEntity as a collection
+    //                of multiple Google Entities.
     return entity.getAppId();
   }
   
@@ -108,6 +114,5 @@ public class MindashEntity {
   public void setUnindexedProperty(String propertyName, Object value){
     
   }
-  
   
 }
