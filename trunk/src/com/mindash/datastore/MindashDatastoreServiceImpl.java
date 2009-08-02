@@ -31,7 +31,7 @@ import com.google.appengine.api.datastore.Transaction;
 /**
  * The implementation of {@link com.mindash.datastore.MindashDatastoreService}.
  * 
- * @author Tristan Slominsk
+ * @author Tristan Slominski
  */
 public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   
