@@ -20,16 +20,16 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.appengine.api.datastore.Entity;
+import com.google.appengine.api.datastore.EntityNotFoundException;
 import com.google.appengine.api.datastore.Key;
 import com.google.appengine.api.datastore.PreparedQuery;
 import com.google.appengine.api.datastore.Query;
 import com.google.appengine.api.datastore.Transaction;
 
 /**
- * @author Tristan Slominski
- * 
  * The wrapper interface for Google's Datastore Service.
- *
+ * 
+ * @author Tristan Slominski
  */
 public interface MindashDatastoreService {
   
@@ -43,9 +43,9 @@ public interface MindashDatastoreService {
 	
 	public void delete(Iterable<Key> keys);
 	
-	public Entity get(Key key);
+	public Entity get(Key key) throws EntityNotFoundException;
 	
-	public Entity get(Transaction txn, Key key);
+	public Entity get(Transaction txn, Key key) throws EntityNotFoundException;
 	
 	public Map<Key, Entity> get(Transaction txn, Iterable<Key> keys);
 	
