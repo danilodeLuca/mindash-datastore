@@ -24,7 +24,7 @@ import org.junit.Test;
  * @author Tristan Slominski
  *
  */
-public class MindashDatastoreServiceImplTest {
+public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
 
   /** TEST CONSTRUCTORS */
   
