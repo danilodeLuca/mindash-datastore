@@ -76,7 +76,24 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   
   @Test
   public void testMindashDatastoreServiceImplGetKey(){
-    assertTrue("Not implemented", false);
+    // retrieving an entity should work
+    Entity e = new Entity("test");
+    Transaction txn = md.beginTransaction();
+    Key key = md.put(e);
+    txn.commit();
+    e = null;
+    try {
+      txn = md.beginTransaction();
+      e = md.get(key);
+      txn.commit();
+    } catch (EntityNotFoundException e1) {
+      fail("Should be able to retrieve the entity after saving it");
+    }
+    if ( e.equals(e) ){
+      assertTrue(true);
+    } else {
+      fail("Retrieved entity should be the same as the saved one");
+    }
   }
   
   @Test

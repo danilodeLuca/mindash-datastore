@@ -34,6 +34,7 @@ import com.google.appengine.api.datastore.Transaction;
 public interface MindashDatastoreService {
   
   public static String MindashKindLayerLabel = "mdd";
+  public static String MindashNamePrefixLabel = "mdd";
   
 	public Transaction beginTransaction();
 	

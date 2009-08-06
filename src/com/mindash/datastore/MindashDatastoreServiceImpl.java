@@ -24,6 +24,7 @@ import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.google.appengine.api.datastore.Entity;
 import com.google.appengine.api.datastore.EntityNotFoundException;
 import com.google.appengine.api.datastore.Key;
+import com.google.appengine.api.datastore.KeyFactory;
 import com.google.appengine.api.datastore.PreparedQuery;
 import com.google.appengine.api.datastore.Query;
 import com.google.appengine.api.datastore.Transaction;
@@ -67,7 +68,11 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public Entity get(Key key) throws EntityNotFoundException {
-    return datastore.get(key);
+    Key mdKey = KeyFactory.createKey(
+        key, 
+        MindashDatastoreService.MindashKindLayerLabel,
+        MindashDatastoreService.MindashNamePrefixLabel);
+    return datastore.get(mdKey);
   }
 
   public Entity get(Transaction txn, Key key) throws EntityNotFoundException {
@@ -127,7 +132,9 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       txn.commit();
     }
     mdEntity = 
-        new Entity(MindashDatastoreService.MindashKindLayerLabel, parentKey);
+        new Entity(MindashDatastoreService.MindashKindLayerLabel, 
+            MindashDatastoreService.MindashNamePrefixLabel,
+            parentKey);
     datastore.put(mdEntity);
     return parentKey;
   }
