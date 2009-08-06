@@ -31,9 +31,14 @@ import com.google.appengine.api.datastore.Transaction;
 /**
  * The implementation of {@link com.mindash.datastore.MindashDatastoreService}.
  * 
+ * <p>Note: Using the Google Protocol Buffers to generate entities instead of
+ * dealing with the <code>Entity</code> interface would probably be better.</p> 
+ * 
  * @author Tristan Slominski
  */
 public class MindashDatastoreServiceImpl implements MindashDatastoreService {
+  
+  public MindashDatastoreServiceImpl(){}
   
   /**
    * Instantiates the datastore only once via the factory per documentation.
@@ -98,6 +103,15 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public Key put(Entity entity) {
+    /**
+     * entity will have indexable and non-indexable properties. The indexable
+     * properties have maximum sizes, so they can be dealt with in a manner
+     * different from really large Blob and Text fields. How do I tell what type
+     * of object any given property is in a given entity? (Solution could
+     * involve passing in MindashEntity property type along with the object to
+     * give a hint as to how to split up entities (by property-value pairs, or
+     * breaking up large blob properties))
+     */
     return datastore.put(entity);
   }
 

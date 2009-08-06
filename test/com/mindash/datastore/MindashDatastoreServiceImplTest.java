@@ -32,7 +32,8 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   
   @Test
   public void testMindashDatastoreServiceImplBeginTransaction(){
-    assertTrue("Not implemented", false);
+    MindashDatastoreService md = new MindashDatastoreServiceImpl();
+    assertTrue("Should start a new transaction", md.beginTransaction() != null);
   }
   
   @Test
