@@ -35,6 +35,7 @@ public interface MindashDatastoreService {
   
   public static String MindashKindLayerLabel = "mdd";
   public static String MindashNamePrefixLabel = "mdd";
+  public static String MindashNameBlockSeparator = "+";
   
 	public Transaction beginTransaction();
 	
