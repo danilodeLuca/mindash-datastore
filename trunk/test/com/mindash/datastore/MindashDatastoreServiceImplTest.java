@@ -16,6 +16,7 @@
 package com.mindash.datastore;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -124,7 +125,23 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   
   @Test
   public void testMindashDatastoreServiceImplGetCurrentTransactionTransaction(){
-    assertTrue("Not implemented", false);
+    Transaction originalTxn = md.getCurrentTransaction();
+    Transaction originalTxn2 = md.getCurrentTransaction(null);
+    assertTrue("Current transaction should be returned", 
+        originalTxn2 == originalTxn);
+    
+    Transaction txn = md.beginTransaction();
+    assertTrue("Current transaction should be the most recent one",
+        md.getCurrentTransaction(null) == txn);
+        
+    txn.commit();
+    assertTrue("Current transaction should be the original after others are " +
+        "committed", md.getCurrentTransaction(null) == originalTxn);
+        
+    txn = md.beginTransaction();
+    txn.rollback();
+    assertTrue("Current transaction should be the orginal after others are " +
+        "crolled back", md.getCurrentTransaction(null) == originalTxn);
   }
   
   @Test
