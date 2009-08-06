@@ -90,8 +90,6 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
     return datastore.get(mdKey);
   }
 
-
-
   public Entity get(Transaction txn, Key key) throws EntityNotFoundException {
     return datastore.get(txn, key);
   }
@@ -141,9 +139,20 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
     if (entity.getKey().getId() != 0 || entity.getKey().getName() != null){
       parentKey = entity.getKey();
     } else {
+      // "strip" the entity just to get a parent key (create a tempEntity that
+      // will get the key the entity would get if it was saved), this is
+      // necessary because if entity > 1MB, when we attempt to
+      // datastore.put(entity) it would result in an exception, this way
+      // datastore.put(tempEntity) will succeed unless something is horribly
+      // wrong
+      Entity tempEntity = new Entity(entity.getKind());
       Transaction txn = datastore.beginTransaction();
-      parentKey = datastore.put(entity);
+      parentKey = datastore.put(tempEntity);
       txn.commit();
+      // clean up after ourselves and get rid of the placeholder entity so that
+      // if the user calls datastore.get on the returned key bypassing
+      // MindashDatastoreService, they will get nothing (this is to maintain
+      // integrity of the program)
       txn = datastore.beginTransaction();
       datastore.delete(parentKey);
       txn.commit();
