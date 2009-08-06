@@ -111,6 +111,11 @@ public class MindashEntity {
   }
   
   // TODO[Tristan]: implement
+  public void setProperty(String propertyName, Object value){
+    
+  }
+  
+  // TODO[Tristan]: implement
   public void setUnindexedProperty(String propertyName, Object value){
     
   }
