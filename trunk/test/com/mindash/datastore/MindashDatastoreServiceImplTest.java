@@ -20,94 +20,103 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 /**
- * Test for <code>MindashEntity</code>.
+ * Test for <code>MindashDatastoreServiceImpl</code>
  * @author Tristan Slominski
  *
  */
-public class MindashEntityTest {
+public class MindashDatastoreServiceImplTest {
 
   /** TEST CONSTRUCTORS */
-  
-  @Test
-  public void testMindashEntityString(){
-    assertTrue("Not implemented", false);
-  }
-  
-  @Test
-  public void testMindashEntityStringKey(){
-    assertTrue("Not implemented", false);
-  }
-  
-  @Test
-  public void testMindashEntityStringString(){
-    assertTrue("Not implemented", false);
-  }
-  
-  @Test
-  public void testMindashEntityStringStringKey(){
-    assertTrue("Not implemented", false);
-  }
   
   /** TEST METHODS */
   
   @Test
-  public void testMindashEntityGetAppId(){
+  public void testMindashDatastoreServiceImplBeginTransaction(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntityGetKey(){
+  public void testMindashDatastoreServiceImplDeleteKey(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntityGetKind(){
+  public void testMindashDatastoreServiceImplDeleteTransactionKeys(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntityGetNamespace(){
+  public void testMindashDatastoreServiceImplDeleteTransactionIterableKey(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntityGetParent(){
+  public void testMindashDatastoreServideImplDeleteIterableKey(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntityGetProperties(){
+  public void testMindashDatastoreServiceImplGetKey(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntityGetPropertyString(){
+  public void testMindashDatastoreServiceImplGetTransactionKey(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntityHasPropertyString(){
+  public void testMindashDatastoreServiceImplGetTransactionIterableKey(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntityRemovePropertyString(){
+  public void testMindashDatastoreServiceImplGetIterableKey(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntitySetPropertiesFromMindashEntity(){
+  public void testMindashDatastoreServiceImplGetActiveTransactions(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntitySetPropertyStringObject(){
+  public void testMindashDatastoreServiceImplGetCurrentTransaction(){
     assertTrue("Not implemented", false);
   }
   
   @Test
-  public void testMindashEntitySetUnindexedPropertyStringObject(){
+  public void testMindashDatastoreServiceImplGetCurrentTransactionTransaction(){
     assertTrue("Not implemented", false);
   }
- 
+  
+  @Test
+  public void testMindashDatastoreServiceImplPrepareQuery(){
+    assertTrue("Not implemented", false);
+  }
+  
+  @Test
+  public void testMindashDatastoreServiceImplPrepareTransactionQuery(){
+    assertTrue("Not implemented", false);
+  }
+  
+  @Test
+  public void testMindashDatastoreServiceImplPutEntity(){
+    assertTrue("Not implemented", false);
+  }
+  
+  @Test
+  public void testMindashDatastoreServiceImplPutTransactionEntity(){
+    assertTrue("Not implemented", false);
+  }
+  
+  @Test
+  public void testMindashDatastoreServiceImplPutTransactionIterableEntity(){
+    assertTrue("Not implemented", false);
+  }
+  
+  @Test
+  public void testMindashDatastoreServiceImplPutIterableEntity(){
+    assertTrue("Not implemented", false);
+  }
 }
