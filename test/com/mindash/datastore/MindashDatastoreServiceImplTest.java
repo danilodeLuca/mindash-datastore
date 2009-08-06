@@ -114,7 +114,12 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
     
     txn.commit();
     assertTrue("Current transaction should be the original after others are " +
-        "committed or rolled back", md.getCurrentTransaction() == originalTxn);
+        "committed", md.getCurrentTransaction() == originalTxn);
+    
+    txn = md.beginTransaction();
+    txn.rollback();
+    assertTrue("Current transaction should be the orginal after others are " +
+        "crolled back", md.getCurrentTransaction() == originalTxn);
   }
   
   @Test
