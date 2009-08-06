@@ -56,7 +56,6 @@ private int invokeConvertAndAdd(int intInt, String stringInt)
 
   return (int) TestUtilities.invokeMethod(
       SomeClass.class,
-      new SomeClass(),
       "convertAndAdd",
       argClasses,
       argObjects);
