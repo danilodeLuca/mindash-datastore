@@ -17,7 +17,10 @@ package com.mindash.datastore;
 
 import static org.junit.Assert.assertTrue;
 
+import org.junit.Before;
 import org.junit.Test;
+
+import com.google.appengine.api.datastore.Transaction;
 
 /**
  * Test for <code>MindashDatastoreServiceImpl</code>
@@ -25,6 +28,14 @@ import org.junit.Test;
  *
  */
 public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
+  
+  private MindashDatastoreService md;
+  
+  @Before
+  public void setUp(){
+    super.setUp();
+    md = new MindashDatastoreServiceImpl();
+  }
 
   /** TEST CONSTRUCTORS */
   
@@ -32,8 +43,9 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   
   @Test
   public void testMindashDatastoreServiceImplBeginTransaction(){
-    MindashDatastoreService md = new MindashDatastoreServiceImpl();
-    assertTrue("Should start a new transaction", md.beginTransaction() != null);
+    Transaction txn = md.beginTransaction();
+    assertTrue("Should start a new transaction", txn != null);
+    assertTrue("Started transaction should be active", txn.isActive());
   }
   
   @Test
@@ -78,7 +90,16 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   
   @Test
   public void testMindashDatastoreServiceImplGetActiveTransactions(){
-    assertTrue("Not implemented", false);
+    assertTrue("There should be only one active transaction to start with",
+        md.getActiveTransactions().size() == 1);
+    
+    Transaction txn = md.beginTransaction();
+    assertTrue("There should be two active transactions after starting one",
+        md.getActiveTransactions().size() == 2);
+    
+    txn.commit();
+    assertTrue("There should be only one active transaction after committing" +
+        " one of the two transactions", md.getActiveTransactions().size() == 1);
   }
   
   @Test
