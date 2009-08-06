@@ -104,7 +104,17 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   
   @Test
   public void testMindashDatastoreServiceImplGetCurrentTransaction(){
-    assertTrue("Not implemented", false);
+    Transaction originalTxn = md.getCurrentTransaction();
+    assertTrue("There should exist a default transaction",
+        originalTxn != null);
+    
+    Transaction txn = md.beginTransaction();
+    assertTrue("Current transaction should be the most recent one",
+        md.getCurrentTransaction() == txn);
+    
+    txn.commit();
+    assertTrue("Current transaction should be the original after others are " +
+        "committed or rolled back", md.getCurrentTransaction() == originalTxn);
   }
   
   @Test
