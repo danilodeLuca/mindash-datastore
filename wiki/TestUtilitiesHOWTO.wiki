@@ -2,7 +2,7 @@
 
 = Introduction =
 
-{{{TestUtilities.java}}} allows for testing of private methods and values. It is meant as a tool for use with the test framework. The argument whether or not testing private methods and values is beyond the scope of this wiki.
+{{{TestUtilities.java}}} allows for testing of private methods and values. It is meant as a tool for use with the test framework. The argument whether or not testing private methods and values is a good idea is beyond the scope of this wiki.
 
 
 = Details =
