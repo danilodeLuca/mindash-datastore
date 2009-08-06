@@ -21,7 +21,12 @@ import static org.junit.Assert.fail;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.google.appengine.api.datastore.DatastoreService;
+import com.google.appengine.api.datastore.Entity;
+import com.google.appengine.api.datastore.EntityNotFoundException;
+import com.google.appengine.api.datastore.Key;
 import com.google.appengine.api.datastore.Transaction;
+import com.mindash.util.TestUtilities;
 
 /**
  * Test for <code>MindashDatastoreServiceImpl</code>
@@ -156,7 +161,90 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   
   @Test
   public void testMindashDatastoreServiceImplPutEntity(){
-    assertTrue("Not implemented", false);
+    DatastoreService datastore = 
+        (DatastoreService) TestUtilities.getPrivateField(md, "datastore");
+    
+    // save an entity with key as long id (unspecified)
+    Entity e = new Entity("test");
+    Transaction txn = md.beginTransaction();
+    Key key = md.put(e);
+    txn.commit();
+    // an extra "mdd" layer should be added to the entity
+    try {
+      txn = datastore.beginTransaction();
+      datastore.get(key);
+      txn.commit();
+      fail("An extra \"mdd\" layer should have been added to the entity (key " +
+          "long id (unspecified); i.e. the key should be [test,id][mdd,id], " +
+          "not [test,id]");
+    } catch (EntityNotFoundException e1) {
+      assertTrue(true);
+    }
+    
+    // save an entity with key as string name (specified)
+    e = new Entity("test","test");
+    txn = md.beginTransaction();
+    key = md.put(e);
+    txn.commit();
+    // an extra "mdd" layer should be added to the entity
+    try {
+      txn = datastore.beginTransaction();
+      datastore.get(key);
+      txn.commit();
+      fail("An extra \"mdd\" layer should have been added to the entity (key " +
+          "string name (specified); i.e. the key should be [test,id][mdd,id]," +
+          " not [test,id]");
+    } catch (EntityNotFoundException e1) {
+      assertTrue(true);
+    }
+    
+    // TODO: continue adding more tests
+    
+//    Entity e = new Entity("test");
+//    Transaction txn = md.beginTransaction();
+//    Key key = md.put(e);
+//    txn.commit();
+//    assertTrue("Should be able to store the default entity", key != null);
+//    
+//    e = new Entity("test");
+//    e.setProperty("someProperty", "myValue");
+//    txn = md.beginTransaction();
+//    key = md.put(e);
+//    txn.commit();
+//    assertTrue("Should be able to store an entity with some properties set",
+//        key != null);
+//    
+//    e = new Entity("test");
+//    String fileName = "semantics.pdf";
+//    String path = "test/com/mindash/datastore/" + fileName;
+//    File book = new File(path);
+//    FileInputStream fis = null;
+//    try {
+//      fis = new FileInputStream(book);
+//    } catch (FileNotFoundException e1) {
+//      fail("File \"" + fileName + "\" not found at \"" + path + "\"");
+//    }
+//    byte[] buffer = new byte[700000];
+//    int iterations = 3;
+//    while (iterations > 0){
+//      try {
+//        fis.read(buffer);
+//        e.setProperty("block" + iterations, new Text(new String(buffer)));
+//        iterations--;
+//      } catch (IOException e1) {
+//        fail("IOException!");
+//      }
+//    }
+//    txn = md.beginTransaction();
+//    int totalSize = 0;
+//    Iterator<Entry<String,Object>> i = e.getProperties().entrySet().iterator();
+//    while (i.hasNext()){
+//      
+//    }
+//    key = md.put(e);
+//    txn.commit();
+//    assertTrue("Should be able to store an entity greater than 1MB",
+//        key != null);
   }
   
   @Test

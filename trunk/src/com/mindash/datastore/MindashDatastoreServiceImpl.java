@@ -104,6 +104,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
 
   public Key put(Entity entity) {
     /**
+     * SOME NOTES:
      * entity will have indexable and non-indexable properties. The indexable
      * properties have maximum sizes, so they can be dealt with in a manner
      * different from really large Blob and Text fields. How do I tell what type
@@ -112,7 +113,23 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
      * give a hint as to how to split up entities (by property-value pairs, or
      * breaking up large blob properties))
      */
-    return datastore.put(entity);
+    Entity mdEntity = null;
+    Key parentKey = null;
+    // check if the key is complete
+    if (entity.getKey().getId() != 0 || entity.getKey().getName() != null){
+      parentKey = entity.getKey();
+    } else {
+      Transaction txn = datastore.beginTransaction();
+      parentKey = datastore.put(entity);
+      txn.commit();
+      txn = datastore.beginTransaction();
+      datastore.delete(parentKey);
+      txn.commit();
+    }
+    mdEntity = 
+        new Entity(MindashDatastoreService.MindashKindLayerLabel, parentKey);
+    datastore.put(mdEntity);
+    return parentKey;
   }
 
   public Key put(Transaction txn, Entity entity) {

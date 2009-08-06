@@ -33,6 +33,8 @@ import com.google.appengine.api.datastore.Transaction;
  */
 public interface MindashDatastoreService {
   
+  public static String MindashKindLayerLabel = "mdd";
+  
 	public Transaction beginTransaction();
 	
 	public void delete(Key... keys);
