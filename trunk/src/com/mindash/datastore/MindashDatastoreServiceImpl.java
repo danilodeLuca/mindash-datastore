@@ -46,6 +46,19 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    */
   private DatastoreService datastore = 
       DatastoreServiceFactory.getDatastoreService();
+  
+  /**
+   * Utility method to create key name based on the desired block and the total
+   * blocks.
+   * @param thisBlock
+   * @param extraBlocks
+   */
+  private String createMindashDatastoreKeyName(String thisBlock,
+          String extraBlocks) {
+    return MindashDatastoreService.MindashNamePrefixLabel +
+        thisBlock + MindashDatastoreService.MindashNameBlockSeparator +
+        extraBlocks;
+  }
 
   public Transaction beginTransaction() {
     return datastore.beginTransaction();
@@ -68,12 +81,16 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public Entity get(Key key) throws EntityNotFoundException {
+    String thisBlock = String.valueOf(0);
+    String extraBlocks = String.valueOf(0);
     Key mdKey = KeyFactory.createKey(
         key, 
         MindashDatastoreService.MindashKindLayerLabel,
-        MindashDatastoreService.MindashNamePrefixLabel);
+        this.createMindashDatastoreKeyName(thisBlock, extraBlocks));
     return datastore.get(mdKey);
   }
+
+
 
   public Entity get(Transaction txn, Key key) throws EntityNotFoundException {
     return datastore.get(txn, key);
@@ -131,9 +148,11 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       datastore.delete(parentKey);
       txn.commit();
     }
+    String thisBlock = String.valueOf(0);
+    String extraBlocks = String.valueOf(0);
     mdEntity = 
         new Entity(MindashDatastoreService.MindashKindLayerLabel, 
-            MindashDatastoreService.MindashNamePrefixLabel,
+            this.createMindashDatastoreKeyName(thisBlock, extraBlocks),
             parentKey);
     datastore.put(mdEntity);
     return parentKey;
