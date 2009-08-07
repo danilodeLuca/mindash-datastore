@@ -52,6 +52,17 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       DatastoreServiceFactory.getDatastoreService();
   
   /**
+   * Adds the property overhead for an entity property
+   * @param property the property to estimate overhead for
+   * @return overhead in bytes
+   */
+  private long propertyOverheadSize(Entry<String, Object> property) {
+    // assumed size of property overhead & size of the key
+    return MindashDatastoreService.MindashAssumedPropertyOverhead +
+        property.getKey().length() * 4; // allow for UTF-32;
+  }
+  
+  /**
    * Utility method to create key name based on the desired shard.
    * 
    * @param thisShard
@@ -61,9 +72,11 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
   
   /**
-   * @param parentKey
-   * @param thisShard
-   * @return
+   * Utility method to create an entity with the appropriate key for the
+   * particular shard.
+   * @param parentKey the parent key
+   * @param thisShard the number of the shard (they start at 0)
+   * @return the created entity
    */
   private Entity createMindashEntityShard(Key parentKey, int thisShard) {
     return new Entity(
@@ -98,10 +111,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
         }
         // size of the string itself
         size += ((String) value).length() * 4; // allow for UTF-32
-        // assumed size of property overhead
-        size += MindashDatastoreService.MindashAssumedPropertyOverhead;
-        // size of the key referencing the property
-        size += property.getKey().length() * 4; // allow for UTF-32
+        size += propertyOverheadSize(property);
         // see if there is room to add the property
         if ( size < MindashDatastoreService.MindashEntityMaximumSize ){
           // entity can accept this property
@@ -112,10 +122,47 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           // entity is full, should be closed and a new entity started
           return shard;
         }
-      } // TODO: implement the other datatypes
+      } else if ( double.class.isInstance(value) ){
+        // if it can be cast into a double, it should be a number
+        // property is a number
+        // size is max of 8 bytes
+        size += 8;
+        size += propertyOverheadSize(property);
+        // see if there is room to add the property
+        if ( size < MindashDatastoreService.MindashEntityMaximumSize ){
+          // entity can accept this property
+          shard.setProperty(property.getKey(), value);
+          // remove the property so we don't go to it on the next iteration
+          properties.remove(property);
+        } else {
+          // entity is full, should be closed and a new entity sharted
+          return shard;
+        }
+      } else if ( Key.class.isInstance(value) ){
+        // currently don't know how big a Key can be (it's recursive so in
+        // theory it could be quite large ...
+        // property is a Key
+        // TODO: determine what size to add
+        //      *if Key is unbounded, need to rework the mechanics as we
+        //       may have to split the key like a Text or a Blob
+        size += propertyOverheadSize(property);
+        // see if there is room to add the property
+        if ( size < MindashDatastoreService.MindashEntityMaximumSize ){
+          // entity can accept this property
+          shard.setProperty(property.getKey(), value);
+          // remove the property so we don't go to it on the next iteration
+          properties.remove(property);
+        } else {
+          // entity is full, should be closed and a new entity started
+          return shard;
+        }
+      }
+      // TODO: implement the other datatypes
     }
     return shard;
   }
+
+
 
   public Transaction beginTransaction() {
     return datastore.beginTransaction();
