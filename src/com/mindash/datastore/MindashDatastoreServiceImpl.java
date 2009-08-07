@@ -15,10 +15,14 @@
  */
 package com.mindash.datastore;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
+import com.google.appengine.api.datastore.DataTypeUtils;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.google.appengine.api.datastore.Entity;
@@ -48,16 +52,69 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       DatastoreServiceFactory.getDatastoreService();
   
   /**
-   * Utility method to create key name based on the desired block and the total
-   * blocks.
-   * @param thisBlock
-   * @param extraBlocks
+   * Utility method to create key name based on the desired shard.
+   * 
+   * @param thisShard
    */
-  private String createMindashDatastoreKeyName(String thisBlock,
-          String extraBlocks) {
-    return MindashDatastoreService.MindashNamePrefixLabel +
-        thisBlock + MindashDatastoreService.MindashNameBlockSeparator +
-        extraBlocks;
+  private String createMindashDatastoreKeyName(int thisShard) {
+    return MindashDatastoreService.MindashNamePrefixLabel + thisShard;
+  }
+  
+  /**
+   * @param parentKey
+   * @param thisShard
+   * @return
+   */
+  private Entity createMindashEntityShard(Key parentKey, int thisShard) {
+    return new Entity(
+        MindashDatastoreService.MindashKindLayerLabel,
+        this.createMindashDatastoreKeyName(thisShard),
+        parentKey);
+  }
+  
+  /**
+   * Creates a storable shard that is less than 1MB while consuming properties
+   * from the property map.
+   * @param properties the map of properties of the main entity
+   * @param shard the shard to add the properties to
+   * @return shard to store
+   */
+  private Entity generateStorableEntityShard(Map<String, Object> properties, 
+          Entity shard) {
+    Iterator<Entry<String,Object>> i = properties.entrySet().iterator();
+    long size = MindashDatastoreService.MindashInitialEntityOverheadSize;
+    while (i.hasNext()){
+      // get the next property
+      Entry<String, Object> property = i.next();
+      Object value = property.getValue();
+      // find out the property's size
+      if ( String.class.isInstance(value)){
+        // property is a string
+        // make sure it is not too long
+        if (((String) value).length() > 
+            DataTypeUtils.MAX_STRING_PROPERTY_LENGTH){
+          throw new IllegalArgumentException("String cannot be longer than " +
+              DataTypeUtils.MAX_STRING_PROPERTY_LENGTH);
+        }
+        // size of the string itself
+        size += ((String) value).length() * 4; // allow for UTF-32
+        // assumed size of property overhead
+        size += MindashDatastoreService.MindashAssumedPropertyOverhead;
+        // size of the key referencing the property
+        size += property.getKey().length() * 4; // allow for UTF-32
+        // see if there is room to add the property
+        if ( size < MindashDatastoreService.MindashEntityMaximumSize ){
+          // entity can accept this property
+          shard.setProperty(property.getKey(), value);
+          // remove the property so we don't go to it on the next iteration
+          properties.remove(property);
+        } else {
+          // entity is full, should be closed and a new entity started
+          return shard;
+        }
+      } // TODO: implement the other datatypes
+    }
+    return shard;
   }
 
   public Transaction beginTransaction() {
@@ -81,12 +138,11 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public Entity get(Key key) throws EntityNotFoundException {
-    String thisBlock = String.valueOf(0);
-    String extraBlocks = String.valueOf(0);
+    int thisShard = 0;
     Key mdKey = KeyFactory.createKey(
         key, 
         MindashDatastoreService.MindashKindLayerLabel,
-        this.createMindashDatastoreKeyName(thisBlock, extraBlocks));
+        this.createMindashDatastoreKeyName(thisShard));
     return datastore.get(mdKey);
   }
 
@@ -133,7 +189,6 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
      * give a hint as to how to split up entities (by property-value pairs, or
      * breaking up large blob properties))
      */
-    Entity mdEntity = null;
     Key parentKey = null;
     // check if the key is complete
     if (entity.getKey().getId() != 0 || entity.getKey().getName() != null){
@@ -157,13 +212,48 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       datastore.delete(parentKey);
       txn.commit();
     }
-    String thisBlock = String.valueOf(0);
-    String extraBlocks = String.valueOf(0);
-    mdEntity = 
-        new Entity(MindashDatastoreService.MindashKindLayerLabel, 
-            this.createMindashDatastoreKeyName(thisBlock, extraBlocks),
-            parentKey);
-    datastore.put(mdEntity);
+    /**
+     * As per javadoc, the following are the classes that can be safely stored
+     * as properties in the datastore.
+     * - String (but not StringBuffer) -> 
+     *     limited by DataTypeUtils.MAX_STRING_PROPERTY_LENGTH (500)
+     * - from Byte to Long, Float, and Double -> 8 bytes max
+     * - Key -> ? size (could be quite large depending on the nesting level)
+     * - User -> ? size (should have a constantish size)
+     * - ShortBlob (indexable) ->
+     *     limited by DataTypeUtils.MAX_SHORT_BLOB_PROPERTY_LENGTH (500)
+     * - Date -> ? size (assuming 8 bytes to store the Long)
+     * - Link -> limited by DataTypeUtils.MAX_LINK_PROPERTY_LENGTH (2038)
+     * - Blob (unindexed) -> unlimited
+     * - Text (unindexed) -> unlimited
+     * ********************
+     * This is an incarnation of the packing problem: have properties of 
+     * different size trying to put them in containers; if i remember correctly,
+     * trying to find an optimal arrangement would result in combinatorial 
+     * explosion. The naive, and at the same time computationally safe method, 
+     * is to walk through the properties map, checking each property and 
+     * assembling a storable entity while keeping track of potential size limit.
+     * Once we reach the point where adding the next property would make the 
+     * entity too large, we just start another entity.
+     */
+    Map<String, Object> properties = entity.getProperties();
+    ArrayList<Entity> shardsToStore = new ArrayList<Entity>();
+    // first shard is always 0
+    int thisShard = 0;
+    while (!properties.isEmpty()){
+      Entity shard = createMindashEntityShard(parentKey, thisShard);
+      // fill up this shard with properties and add it to storage queue
+      shardsToStore.add(generateStorableEntityShard(properties, shard));
+      thisShard++;
+    }
+    // find out how many shards we got
+    int shardCount = shardsToStore.size();
+    // store the count in the first shard
+    shardsToStore.get(0).setProperty(
+        MindashDatastoreService.MindashShardCountLabel, shardCount);
+    // TODO: do a 500 limit safe put
+    datastore.put(shardsToStore);
+    // TODO: verify the shards got put
     return parentKey;
   }
 
