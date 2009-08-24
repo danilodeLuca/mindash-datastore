@@ -67,8 +67,21 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    * 
    * @param thisShard
    */
-  private String createMindashDatastoreKeyName(int thisShard) {
+  private static String createMindashDatastoreKeyName(int thisShard) {
     return MindashDatastoreService.MindashNamePrefixLabel + thisShard;
+  }
+  
+  /**
+   * Utility method to create a key based on the desired shard.
+   * @param key the key to generate Mindash Datastore key for
+   * @param shard the shard to get
+   * @return the key callable from original DatastoreService
+   */
+  public static Key createMindashDatastoreKey(Key key, int shard){
+    return KeyFactory.createKey(
+        key,
+        MindashDatastoreService.MindashKindLayerLabel,
+        createMindashDatastoreKeyName(shard));
   }
   
   /**
@@ -81,7 +94,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   private Entity createMindashEntityShard(Key parentKey, int thisShard) {
     return new Entity(
         MindashDatastoreService.MindashKindLayerLabel,
-        this.createMindashDatastoreKeyName(thisShard),
+        MindashDatastoreServiceImpl.createMindashDatastoreKeyName(thisShard),
         parentKey);
   }
   
@@ -92,8 +105,15 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    * @param shard the shard to add the properties to
    * @return shard to store
    */
-  private Entity generateStorableEntityShard(Map<String, Object> properties, 
-          Entity shard) {
+  private Entity generateStorableEntityShard(Entity entity, Entity shard) {
+    Map<String, Object> properties = entity.getProperties();
+    
+    /** if there are no properties, return the shard */
+    if ( properties == null ){
+      return shard;
+    }
+    
+    /** have properties to do things with */
     Iterator<Entry<String,Object>> i = properties.entrySet().iterator();
     long size = MindashDatastoreService.MindashInitialEntityOverheadSize;
     while (i.hasNext()){
@@ -101,7 +121,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       Entry<String, Object> property = i.next();
       Object value = property.getValue();
       // find out the property's size
-      if ( String.class.isInstance(value)){
+      if ( value instanceof String){
         // property is a string
         // make sure it is not too long
         if (((String) value).length() > 
@@ -117,13 +137,12 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           // entity can accept this property
           shard.setProperty(property.getKey(), value);
           // remove the property so we don't go to it on the next iteration
-          properties.remove(property);
+          entity.removeProperty(property.getKey());
         } else {
           // entity is full, should be closed and a new entity started
           return shard;
         }
-      } else if ( double.class.isInstance(value) ){
-        // if it can be cast into a double, it should be a number
+      } else if ( value instanceof Number){
         // property is a number
         // size is max of 8 bytes
         size += 8;
@@ -133,12 +152,12 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           // entity can accept this property
           shard.setProperty(property.getKey(), value);
           // remove the property so we don't go to it on the next iteration
-          properties.remove(property);
+          entity.removeProperty(property.getKey());
         } else {
-          // entity is full, should be closed and a new entity sharted
+          // entity is full, should be closed and a new entity started
           return shard;
         }
-      } else if ( Key.class.isInstance(value) ){
+      } else if ( value instanceof Key){
         // currently don't know how big a Key can be (it's recursive so in
         // theory it could be quite large ...
         // property is a Key
@@ -151,7 +170,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           // entity can accept this property
           shard.setProperty(property.getKey(), value);
           // remove the property so we don't go to it on the next iteration
-          properties.remove(property);
+          entity.removeProperty(property.getKey());
         } else {
           // entity is full, should be closed and a new entity started
           return shard;
@@ -186,10 +205,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
 
   public Entity get(Key key) throws EntityNotFoundException {
     int thisShard = 0;
-    Key mdKey = KeyFactory.createKey(
-        key, 
-        MindashDatastoreService.MindashKindLayerLabel,
-        this.createMindashDatastoreKeyName(thisShard));
+    Key mdKey = createMindashDatastoreKey(key, thisShard);
     return datastore.get(mdKey);
   }
 
@@ -283,15 +299,17 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
      * Once we reach the point where adding the next property would make the 
      * entity too large, we just start another entity.
      */
-    Map<String, Object> properties = entity.getProperties();
     ArrayList<Entity> shardsToStore = new ArrayList<Entity>();
     // first shard is always 0
     int thisShard = 0;
-    while (!properties.isEmpty()){
+    while (true){
       Entity shard = createMindashEntityShard(parentKey, thisShard);
       // fill up this shard with properties and add it to storage queue
-      shardsToStore.add(generateStorableEntityShard(properties, shard));
+      shardsToStore.add(generateStorableEntityShard(entity, shard));
       thisShard++;
+      if (entity.getProperties().isEmpty()){
+        break;
+      }
     }
     // find out how many shards we got
     int shardCount = shardsToStore.size();
