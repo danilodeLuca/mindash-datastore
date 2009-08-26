@@ -18,15 +18,26 @@ package com.mindash.datastore;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.Date;
+
 import org.junit.Before;
 import org.junit.Test;
 
+import com.google.appengine.api.datastore.Blob;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.Entity;
 import com.google.appengine.api.datastore.EntityNotFoundException;
 import com.google.appengine.api.datastore.Key;
 import com.google.appengine.api.datastore.KeyFactory;
+import com.google.appengine.api.datastore.Link;
+import com.google.appengine.api.datastore.ShortBlob;
+import com.google.appengine.api.datastore.Text;
 import com.google.appengine.api.datastore.Transaction;
+import com.google.appengine.api.users.User;
 import com.mindash.util.TestUtilities;
 
 /**
@@ -82,16 +93,16 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   public void testMindashDatastoreServiceImplGetKey(){
     // retrieving an entity should work
     Entity e = new Entity("test");
-    Transaction txn = md.beginTransaction();
-    Key key = md.put(e);
-    txn.commit();
+    Key key = executeMdPut(e);
     e = null;
     try {
-      txn = md.beginTransaction();
+      Transaction txn = md.beginTransaction();
       e = md.get(key);
       txn.commit();
     } catch (EntityNotFoundException e1) {
       fail("Should be able to retrieve the entity after saving it");
+    } catch (EntityCorruptException ex) {
+      fail("Entity is corrupt");
     }
     if ( e.equals(e) ){
       assertTrue(true);
@@ -184,12 +195,10 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   public void PutEntityNoKey(){
     // save an entity with key as long id (unspecified)
     Entity e = new Entity("test");
-    Transaction txn = md.beginTransaction();
-    Key key = md.put(e);
-    txn.commit();
+    Key key = executeMdPut(e);
     // an extra "mdd" layer should be added to the entity
     try {
-      txn = datastore.beginTransaction();
+      Transaction txn = datastore.beginTransaction();
       datastore.get(key);
       txn.commit();
       fail("An extra \"mdd\" layer should have been added to the entity (key " +
@@ -204,12 +213,10 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   public void PutEntityStringKey(){
     // save an entity with key as string name (specified)
     Entity e = new Entity("test","test");
-    Transaction txn = md.beginTransaction();
-    Key key = md.put(e);
-    txn.commit();
+    Key key = executeMdPut(e);
     // an extra "mdd" layer should be added to the entity
     try {
-      txn = datastore.beginTransaction();
+      Transaction txn = datastore.beginTransaction();
       datastore.get(key);
       txn.commit();
       fail("An extra \"mdd\" layer should have been added to the entity (key " +
@@ -225,9 +232,7 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
     // save an entity with small property, should be only one shard
     Entity e = new Entity("testProperty1","test");
     e.setProperty("property1", "This is a string property");
-    Transaction txn = md.beginTransaction();
-    Key key = md.put(e);
-    txn.commit();
+    Key key = executeMdPut(e);
     
     CheckForExtraMDDLayer(key);
     CheckFor0thShard(key);
@@ -246,9 +251,7 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
   public void PutEntityOneIntegerProperty(){
     Entity e = new Entity("testProperty1", "test");
     e.setProperty("property1", 1);
-    Transaction txn = md.beginTransaction();
-    Key key = md.put(e);
-    txn.commit();
+    Key key = executeMdPut(e);
     
     CheckForExtraMDDLayer(key);
     CheckFor0thShard(key);
@@ -260,6 +263,240 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase{
     
     // should only be 0 shard
     CheckForNoExtraShards(key, 1);
+  }
+  
+  @Test
+  public void PutEntityOneDoubleProperty(){
+    Entity e = new Entity("testProperty1", "test");
+    e.setProperty("property1", (double) 1.0);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("'property1' should be " + 1.0,
+        ((Double)e.getProperty("property1")) == 1.0);
+    
+    // should only be 0 shard
+    CheckForNoExtraShards(key, 1);
+  }
+  
+  @Test
+  public void PutEntityOneKeyProperty(){
+    Entity e = new Entity("testProperty1", "test");
+    Key myKey = KeyFactory.createKey("myKind", 1732);
+    e.setProperty("property1", myKey);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("'property1' should be " + KeyFactory.keyToString(myKey),
+        ((Key)e.getProperty("property1")).equals(myKey));
+    
+    // should only be 0 shard
+    CheckForNoExtraShards(key, 1);
+  }
+  
+  @Test
+  public void PutEntityOneUserProperty(){
+    Entity e = new Entity("testProperty1", "test");
+    User user = new User("example@email.com", "google.com");
+    e.setProperty("property1", user);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("'property1' should be User with authDomain: " + 
+        user.getAuthDomain() + " email: " + user.getEmail() + " nickname " +
+        user.getNickname(),((User)e.getProperty("property1")).equals(user));
+    
+    // should only be 0 shard
+    CheckForNoExtraShards(key, 1);
+  }
+  
+  @Test
+  public void PutEntityOneShortBlobProperty(){
+    Entity e = new Entity("testProperty1", "test");
+    ShortBlob sb = new ShortBlob("This is some short blob".getBytes());
+    e.setProperty("property1", sb);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("'property1' should be: " + new String(sb.getBytes()),
+        ((ShortBlob)e.getProperty("property1")).equals(sb));
+    
+    // should only be 0 shard
+    CheckForNoExtraShards(key, 1);
+  }
+  
+  @Test
+  public void PutEntityOneDateProperty(){
+    Entity e = new Entity("testProperty1", "test");
+    Date date = new Date();
+    e.setProperty("property1", date);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("'property1' should be: " + date.getTime(),
+        ((Date) e.getProperty("property1")).equals(date));
+    
+    // should only be 0 shard
+    CheckForNoExtraShards(key, 1);
+  }
+  
+  @Test
+  public void PutEntityOneLinkProperty(){
+    Entity e = new Entity("testProperty1", "test");
+    Link link = new Link("this is some link");
+    e.setProperty("property1", link);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("'property1' should be: " + link.getValue(),
+        ((Link) e.getProperty("property1")).equals(link));
+    
+    // should only be 0 shard
+    CheckForNoExtraShards(key, 1);
+  }
+  
+  @Test
+  public void PutEntityOneBlobPropertyShortLength(){
+    Entity e = new Entity("testProperty1", "test");
+    Blob blob = new Blob("this is a normal sized blob".getBytes());
+    e.setProperty("property1", blob);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("'property1' shoudl be: " + new String(blob.getBytes()),
+        ((Blob)e.getProperty("property1")).equals(blob));
+    
+    CheckForNoExtraShards(key, 1);
+  }
+  
+  @Test
+  public void PutEntityOneBlobPropertyLongLength(){
+    Entity e = new Entity("testProperty1", "test");
+    // generate really long blob
+    String fileName = "semantics.pdf";
+    String path = "test/com/mindash/datastore/" + fileName;
+    File book = new File(path);
+    FileInputStream fis = null;
+    try {
+      fis = new FileInputStream(book);
+    } catch (FileNotFoundException e1){
+      fail("File \"" + fileName + "\" not found at \"" + path + "\"");
+    }
+    byte[] buffer = new byte[2000000];
+    try {
+      fis.read(buffer);
+    } catch (IOException e1) {
+      fail("IOException!");
+    }
+    Blob blob = new Blob(buffer);
+    e.setProperty("property1", blob);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("shard 0 should not have the entire long blob",
+        !((Blob)e.getProperty("property1")).equals(blob));
+    
+    // shard 1 should exist
+    getEntityFromGoogleDatastore(key, 1);
+    
+    CheckForNoExtraShards(key, 2);
+  }
+  
+  @Test
+  public void PutEntityOneTextPropertyShortLength(){
+    Entity e = new Entity("testProperty1", "test");
+    Text text = new Text("this is normal sized text");
+    e.setProperty("property1", text);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("'property1' should be: " + text.getValue(),
+        ((Text)e.getProperty("property1")).equals(text));
+    
+    CheckForNoExtraShards(key, 1);
+  }
+  
+  @Test
+  public void PutEntityOneTextPropertyLongLength(){
+    Entity e = new Entity("testProperty1", "test");
+    // generate really long text
+    String fileName = "semantics.pdf";
+    String path = "test/com/mindash/datastore/" + fileName;
+    File book = new File(path);
+    FileInputStream fis = null;
+    try {
+      fis = new FileInputStream(book);
+    } catch (FileNotFoundException e1){
+      fail("File \"" + fileName + "\" not found at \"" + path + "\"");
+    }
+    byte[] buffer = new byte[2000000];
+    try {
+      fis.read(buffer);
+    } catch (IOException e1){
+      fail("IOException!");
+    }
+    Text text = new Text(new String(buffer));
+    e.setProperty("property1", text);
+    Key key = executeMdPut(e);
+    
+    CheckForExtraMDDLayer(key);
+    CheckFor0thShard(key);
+    
+    e = getEntityFromGoogleDatastore(key, 0);
+    
+    assertTrue("shard 0 should not have the entire long text",
+        !((Text)e.getProperty("property1")).equals(text));
+    
+    // shard 1 should exist
+    getEntityFromGoogleDatastore(key, 1);
+    
+    CheckForNoExtraShards(key, 2);
+  }
+
+  /**
+   * @param e
+   */
+  private Key executeMdPut(Entity e) {
+    Transaction txn = md.beginTransaction();
+    Key key = md.put(e);
+    txn.commit();
+    return key;
   }
   
   private void CheckFor0thShard(Key key){

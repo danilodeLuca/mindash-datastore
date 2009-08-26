@@ -36,9 +36,9 @@ public interface MindashDatastoreService {
   public static String MindashKindLayerLabel = "mdd";
   public static String MindashNamePrefixLabel = "mdd";
   public static String MindashShardCountLabel = "mddx";
-  public static long MindashInitialEntityOverheadSize = 1024;
-  public static long MindashEntityMaximumSize = 1024 * 1024;
-  public static long MindashAssumedPropertyOverhead = 128;
+  public static int MindashInitialEntityOverheadSize = 1024;
+  public static int MindashEntityMaximumSize = 1024 * 1024;
+  public static int MindashAssumedPropertyOverhead = 128;
   
 	public Transaction beginTransaction();
 	
@@ -50,7 +50,8 @@ public interface MindashDatastoreService {
 	
 	public void delete(Iterable<Key> keys);
 	
-	public Entity get(Key key) throws EntityNotFoundException;
+	public Entity get(Key key) throws EntityNotFoundException,
+	    EntityCorruptException;
 	
 	public Entity get(Transaction txn, Key key) throws EntityNotFoundException;
 	
