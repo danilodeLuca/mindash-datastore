@@ -27,7 +27,8 @@ import com.google.appengine.api.datastore.Query;
 import com.google.appengine.api.datastore.Transaction;
 
 /**
- * The wrapper interface for Google's Datastore Service.
+ * The wrapper interface for Google's Datastore Service that enables storing
+ * entities greater than 1MB.
  * 
  * @author Tristan Slominski
  */
