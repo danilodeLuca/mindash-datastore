@@ -41,40 +41,58 @@ public interface MindashDatastoreService {
   public static int MindashEntityMaximumSize = 1024 * 1024;
   public static int MindashAssumedPropertyOverhead = 128;
   
+  /* implemented */
 	public Transaction beginTransaction();
 	
+	/* implemented */
 	public void delete(Key... keys);
 	
+	// TODO: implement
 	public void delete(Transaction txn, Key... keys);
 	
+	// TODO: implement
 	public void delete(Transaction txn, Iterable<Key> keys);
 	
+	/* implemented */
 	public void delete(Iterable<Key> keys);
 	
+	/* implemented */
 	public Entity get(Key key) throws EntityNotFoundException,
 	    EntityCorruptException;
 	
+	// TODO: implement
 	public Entity get(Transaction txn, Key key) throws EntityNotFoundException;
 	
+	// TODO: implement
 	public Map<Key, Entity> get(Transaction txn, Iterable<Key> keys);
 	
+	// TODO: implement
 	public Map<Key, Entity> get(Iterable<Key> keys);
 	
+	/* implemented */
 	public Collection<Transaction> getActiveTransactions();
 	
+	/* implemented */
 	public Transaction getCurrentTransaction();
 	
+	/* implemented */
 	public Transaction getCurrentTransaction(Transaction txn);
 	
+	// TODO: implement
 	public PreparedQuery prepare(Query query);
 	
+	// TODO: implement
 	public PreparedQuery prepare(Transaction txn, Query query);
 	
+	/* implemented */
 	public Key put(Entity entity);
 	
+	// TODO: implement
 	public Key put(Transaction txn, Entity entity);
 	
+	// TODO: implement
 	public List<Key> put(Transaction txn, Iterable<Entity> entities);
 	
+	// TODO: implement
 	public List<Key> put(Iterable<Entity> entities);
 }

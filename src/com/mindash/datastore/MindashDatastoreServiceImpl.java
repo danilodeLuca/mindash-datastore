@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
+
 import com.google.appengine.api.datastore.Blob;
 import com.google.appengine.api.datastore.DataTypeUtils;
 import com.google.appengine.api.datastore.DatastoreService;
@@ -578,15 +580,15 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public Entity get(Transaction txn, Key key) throws EntityNotFoundException {
-    return datastore.get(txn, key);
+    throw new NotImplementedException();
   }
 
   public Map<Key, Entity> get(Transaction txn, Iterable<Key> keys) {
-    return datastore.get(txn, keys);
+    throw new NotImplementedException();
   }
 
   public Map<Key, Entity> get(Iterable<Key> keys) {
-    return datastore.get(keys);
+    throw new NotImplementedException();
   }
 
   public Collection<Transaction> getActiveTransactions() {
@@ -602,11 +604,11 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public PreparedQuery prepare(Query query) {
-    return datastore.prepare(query);
+    throw new NotImplementedException();
   }
 
   public PreparedQuery prepare(Transaction txn, Query query) {
-    return datastore.prepare(txn, query);
+    throw new NotImplementedException();
   }
 
   public Key put(Entity entity) {
@@ -691,15 +693,15 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public Key put(Transaction txn, Entity entity) {
-    return datastore.put(txn, entity);
+    throw new NotImplementedException();
   }
 
   public List<Key> put(Transaction txn, Iterable<Entity> entities) {
-    return datastore.put(txn, entities);
+    throw new NotImplementedException();
   }
 
   public List<Key> put(Iterable<Entity> entities) {
-    return datastore.put(entities);
+    throw new NotImplementedException();
   }
   
   @SuppressWarnings("unchecked")

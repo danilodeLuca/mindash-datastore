@@ -21,6 +21,7 @@ import java.util.Map;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.Entity;
 import com.google.appengine.api.datastore.Key;
+import com.google.appengine.api.datastore.Transaction;
 
 /**
  * @author Tristan Slominski
@@ -29,7 +30,13 @@ import com.google.appengine.api.datastore.Key;
 public interface DatastoreHelper {
 
   public Map<Key,Entity> get(DatastoreService datastore, List<Key> keys);
-  public List<Key> put(DatastoreService datastore, List<Entity> entities);  
+  public Map<Key,Entity> get(Transaction txn, DatastoreService datastore,
+      List<Key> keys);
+  public List<Key> put(DatastoreService datastore, List<Entity> entities); 
+  public List<Key> put(Transaction txn, DatastoreService datastore,
+      List<Entity> entities);
   public void delete(DatastoreService datastore, List<Key> keys);
+  public void delete(Transaction txn, DatastoreService datastore, 
+      List<Key> keys);
   
 }
