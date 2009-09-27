@@ -55,6 +55,7 @@ import com.google.appengine.api.datastore.EntityNotFoundException;
 import com.google.appengine.api.datastore.Key;
 import com.google.appengine.api.datastore.KeyFactory;
 import com.google.appengine.api.datastore.Link;
+import com.google.appengine.api.datastore.Query;
 import com.google.appengine.api.datastore.ShortBlob;
 import com.google.appengine.api.datastore.Text;
 import com.google.appengine.api.datastore.Transaction;
@@ -373,11 +374,134 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase
     verify(datastore).beginTransaction();
   }
   
-//  @Test
-//  public void testMindashDatastoreServiceImplDeleteKey(){
-//    assertTrue("Not implemented", false);
+//  class IsAncestorQuery extends ArgumentMatcher<Query>{
+//    Key ancestor;
+//    public IsAncestorQuery(Key ancestor){
+//      super();
+//      this.ancestor = ancestor;
+//    }
+//    public boolean matches(Object query){
+//      if (Query.class.isInstance(query)){
+//        Query q = (Query) query;
+//        if ( q.getAncestor() != null &&
+//            q.getAncestor().equals(ancestor)){
+//          return true;
+//        }
+//      }
+//      return false;
+//    }
 //  }
-//  
+  
+  class IsListOf0thShardKeys extends ArgumentMatcher<List<Key>>{
+    public IsListOf0thShardKeys(){
+      super();
+    }
+    @SuppressWarnings("unchecked")
+    public boolean matches(Object list){
+      if(List.class.isInstance(list)){
+        List<Key> l = (List) list;
+        for (Key k : l){
+          if ( !k.getName().equals(
+              MindashDatastoreService.MindashNamePrefixLabel + 0)){
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    }
+  }
+  
+  @Test
+  public void deleteKeyOneShouldGet0thShardFromDatastore() 
+      throws EntityNotFoundException{
+    Key key = KeyFactory.createKey("testKind", "testName");
+    md.delete(key);
+    verify(datastore).get(argThat(new IsListOf0thShardKeys()));
+  }
+  
+  @Test
+  public void deleteKeyTwoShouldGet0thShardsFromDatastore(){
+    Key key1 = KeyFactory.createKey("testKind1", "testName1");
+    Key key2 = KeyFactory.createKey("testKind2", "testName2");
+    Entity shard01 = mdImpl.createMindashEntityShard(key1, 0);
+    Entity shard02 = mdImpl.createMindashEntityShard(key2, 0);
+    Map<Key, Entity> results = new HashMap<Key,Entity>(2);
+    results.put(shard01.getKey(), shard01);
+    results.put(shard02.getKey(), shard02);
+    Key[] keys = new Key[2];
+    keys[0] = key1;
+    keys[1] = key2;
+    md.delete(keys);
+    verify(datastore).get(argThat(new IsListOf0thShardKeys()));
+  }
+  
+  @Test
+  public void deleteKeyShouldDeleteAllShardsFromDatastore(){
+    Key key = KeyFactory.createKey("testKind", "testName");
+    Entity shard0 = mdImpl.createMindashEntityShard(key, 0);
+    shard0.setProperty(MindashDatastoreService.MindashShardCountLabel, 3);
+    Entity shard1 = mdImpl.createMindashEntityShard(key, 1);
+    Entity shard2 = mdImpl.createMindashEntityShard(key, 2);
+    Map<Key, Entity> shard0results = new HashMap<Key, Entity>(1);
+    shard0results.put(shard0.getKey(), shard0);
+    when(datastore.get(argThat(new IsListOf0thShardKeys())))
+        .thenReturn(shard0results);
+    md.delete(key);
+    List<Key> keys = new ArrayList<Key>(3);
+    keys.add(shard0.getKey());
+    keys.add(shard1.getKey());
+    keys.add(shard2.getKey());
+    verify(datastore).delete(keys);
+  }
+  
+  @Test
+  public void deleteIterableKeysOneShouldGet0thShardFromDatastore() 
+      throws EntityNotFoundException{
+    Key key = KeyFactory.createKey("testKind", "testName");
+    ArrayList<Key> keys = new ArrayList<Key>(1);
+    keys.add(key);
+    md.delete(keys);
+    verify(datastore).get(argThat(new IsListOf0thShardKeys()));
+  }
+  
+  @Test
+  public void deleteIterableKeysTwoShouldGet0thShardsFromDatastore(){
+    Key key1 = KeyFactory.createKey("testKind1", "testName1");
+    Key key2 = KeyFactory.createKey("testKind2", "testName2");
+    Entity shard01 = mdImpl.createMindashEntityShard(key1, 0);
+    Entity shard02 = mdImpl.createMindashEntityShard(key2, 0);
+    Map<Key, Entity> results = new HashMap<Key,Entity>(2);
+    results.put(shard01.getKey(), shard01);
+    results.put(shard02.getKey(), shard02);
+    ArrayList<Key> keys = new ArrayList<Key>(2);
+    keys.add(key1);
+    keys.add(key2);
+    md.delete(keys);
+    verify(datastore).get(argThat(new IsListOf0thShardKeys()));
+  }
+  
+  @Test
+  public void deleteIterableKeysShouldDeleteAllShardsFromDatastore(){
+    Key key = KeyFactory.createKey("testKind", "testName");
+    Entity shard0 = mdImpl.createMindashEntityShard(key, 0);
+    shard0.setProperty(MindashDatastoreService.MindashShardCountLabel, 3);
+    Entity shard1 = mdImpl.createMindashEntityShard(key, 1);
+    Entity shard2 = mdImpl.createMindashEntityShard(key, 2);
+    Map<Key, Entity> shard0results = new HashMap<Key, Entity>(1);
+    shard0results.put(shard0.getKey(), shard0);
+    when(datastore.get(argThat(new IsListOf0thShardKeys())))
+        .thenReturn(shard0results);
+    ArrayList<Key> iKey = new ArrayList<Key>(1);
+    iKey.add(key);
+    md.delete(iKey);
+    List<Key> keys = new ArrayList<Key>(3);
+    keys.add(shard0.getKey());
+    keys.add(shard1.getKey());
+    keys.add(shard2.getKey());
+    verify(datastore).delete(keys);
+  }
+    
 //  @Test
 //  public void testMindashDatastoreServiceImplDeleteTransactionKeys(){
 //    assertTrue("Not implemented", false);

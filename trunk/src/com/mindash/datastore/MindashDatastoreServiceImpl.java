@@ -265,7 +265,47 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public void delete(Key... keys) {
-    datastore.delete(keys);
+    
+    // constructing keys is more efficient than running multiple queries,
+    // so the way delete works, it creates a list of keys to 0 shards of
+    // all the entries, it then reads those and creates all the keys to
+    // be deleted
+    
+    List<Key> key0thShards = new ArrayList<Key>(keys.length);
+    for (int i = 0; i < keys.length; i++){
+      Key k = keys[i];
+      if ( k == null ){
+        continue;
+      }
+      key0thShards.add(createMindashDatastoreKey(k, 0));
+    }
+    
+    datastoreHelper.delete(datastore, generateShardsToDelete(key0thShards));
+  }
+
+  /**
+   * This utility method calls the datastore to get all 0th shards and then
+   * creates all keys to be acted on.
+   * @param key0thShards the list of 0th shards
+   * @return the list of all shards associated with passed in 0th shards
+   */
+  private List<Key> generateShardsToDelete(List<Key> key0thShards) {
+    
+    Map<Key,Entity> shards0th = datastoreHelper.get(datastore, key0thShards);
+    
+    // for each shard generate keys to be deleted
+    List<Key> shardsToDelete = new ArrayList<Key>(shards0th.size());
+    for ( Key k : key0thShards){
+      Entity e = shards0th.get(k);
+      if ( e != null ){
+        int shardCount = (Integer)
+            e.getProperty(MindashDatastoreService.MindashShardCountLabel);
+        for ( int i = 0; i < shardCount; i++){
+          shardsToDelete.add(createMindashDatastoreKey(k.getParent(), i));
+        }
+      }
+    }
+    return shardsToDelete;
   }
 
   public void delete(Transaction txn, Key... keys) {
@@ -277,7 +317,19 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public void delete(Iterable<Key> keys) {
-    datastore.delete(keys);
+    // constructing keys is more efficient than running multiple queries,
+    // so the way delete works, it creates a list of keys to 0 shards of
+    // all the entries, it then reads those and creates all the keys to
+    // be deleted
+    
+    List<Key> key0thShards = new ArrayList<Key>();
+    Iterator<Key> iterator = keys.iterator();
+    while (iterator.hasNext()){
+      Key k = iterator.next();
+      key0thShards.add(createMindashDatastoreKey(k, 0));
+    }
+
+    datastoreHelper.delete(datastore, generateShardsToDelete(key0thShards));
   }
 
   public Entity get(Key key) throws EntityNotFoundException, 
