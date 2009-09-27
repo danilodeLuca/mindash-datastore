@@ -29,7 +29,6 @@ import java.util.Map.Entry;
 import com.google.appengine.api.datastore.Blob;
 import com.google.appengine.api.datastore.DataTypeUtils;
 import com.google.appengine.api.datastore.DatastoreService;
-import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.google.appengine.api.datastore.Entity;
 import com.google.appengine.api.datastore.EntityNotFoundException;
 import com.google.appengine.api.datastore.Key;
@@ -41,6 +40,7 @@ import com.google.appengine.api.datastore.ShortBlob;
 import com.google.appengine.api.datastore.Text;
 import com.google.appengine.api.datastore.Transaction;
 import com.google.appengine.api.users.User;
+import com.google.inject.Inject;
 
 /**
  * The implementation of {@link com.mindash.datastore.MindashDatastoreService}.
@@ -52,20 +52,22 @@ import com.google.appengine.api.users.User;
  */
 public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   
-  public MindashDatastoreServiceImpl(){}
+  private DatastoreService datastore;
+  private DatastoreHelper datastoreHelper;
+  
+  @Inject
+  public MindashDatastoreServiceImpl(DatastoreService datastore,
+      DatastoreHelper datastoreHelper){
+    this.datastore = datastore;
+    this.datastoreHelper = datastoreHelper;
+  }
   
   /**
-   * Instantiates the datastore only once via the factory per documentation.
-   */
-  private DatastoreService datastore = 
-      DatastoreServiceFactory.getDatastoreService();
-  
-  /**
-   * Adds the property overhead for an entity property
+   * Returns the property overhead for an entity property
    * @param property the property to estimate overhead for
    * @return overhead in bytes
    */
-  private int propertyOverheadSize(Entry<String, Object> property) {
+  public int getPropertyOverheadSize(Entry<String, Object> property) {
     // assumed size of property overhead & size of the key
     return MindashDatastoreService.MindashAssumedPropertyOverhead +
         property.getKey().length() * 4; // allow for UTF-32;
@@ -76,7 +78,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    * 
    * @param thisShard
    */
-  private static String createMindashDatastoreKeyName(int thisShard) {
+  public static String createMindashDatastoreKeyName(int thisShard) {
     return MindashDatastoreService.MindashNamePrefixLabel + thisShard;
   }
   
@@ -100,7 +102,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    * @param thisShard the number of the shard (they start at 0)
    * @return the created entity
    */
-  private Entity createMindashEntityShard(Key parentKey, int thisShard) {
+  public Entity createMindashEntityShard(Key parentKey, int thisShard) {
     return new Entity(
         MindashDatastoreService.MindashKindLayerLabel,
         MindashDatastoreServiceImpl.createMindashDatastoreKeyName(thisShard),
@@ -110,11 +112,12 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   /**
    * Creates a storable shard that is less than 1MB while consuming properties
    * from the property map.
-   * @param properties the map of properties of the main entity
+   * @param entity the original entity with all properties; properties will be
+   * stripped from this entity as they are sharded
    * @param shard the shard to add the properties to
    * @return shard to store
    */
-  private Entity generateStorableEntityShard(Entity entity, Entity shard) {
+  public Entity generateStorableEntityShard(Entity entity, Entity shard) {
     Map<String, Object> properties = entity.getProperties();
     
     /** if there are no properties, return the shard */
@@ -131,7 +134,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       int propertyMaximumSize = 
           MindashDatastoreService.MindashEntityMaximumSize -
           MindashDatastoreService.MindashInitialEntityOverheadSize -
-          propertyOverheadSize(property);
+          getPropertyOverheadSize(property);
       Object value = property.getValue();
       // if it's a blob or text, the treatment is different than others
       if ( value instanceof Blob || value instanceof Text ){
@@ -145,11 +148,11 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
             byte[] blobHeadBytes = Arrays.copyOf(((Blob)value).getBytes(), 
                 propertyMaximumSize);
             byte[] blobTailBytes = Arrays.copyOfRange(((Blob)value).getBytes(),
-                propertyMaximumSize + 1, ((Blob)value).getBytes().length);
+                propertyMaximumSize, ((Blob)value).getBytes().length);
             Blob blobHead = new Blob(blobHeadBytes);
             Blob blobTail = new Blob(blobTailBytes);
             size += propertyMaximumSize;
-            size += propertyOverheadSize(property);
+            size += getPropertyOverheadSize(property);
             // see if there is room to add the property
             if ( size <= MindashDatastoreService.MindashEntityMaximumSize){
               // entity can accept the property
@@ -162,13 +165,16 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           } else {
             // blob can fit into one property, do the normal thing
             size += ((Blob) value).getBytes().length;
-            size += propertyOverheadSize(property);
+            size += getPropertyOverheadSize(property);
             // see if there is room to add the property
             if ( size <= MindashDatastoreService.MindashEntityMaximumSize ){
               // entity can accept this property
               shard.setProperty(property.getKey(), value);
               // remove the property so we don't go to it on the next iteration
               entity.removeProperty(property.getKey());
+              // close the shard with only the blob tail or a blob that fits
+              // so that retrieval in getKey can be simplified
+              return shard;
             } else {
               // entity is full, should be closed and a new entity started
               return shard;
@@ -177,48 +183,6 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
         } else if ( value instanceof Text ){
           throw new IllegalArgumentException("Mindash Datastore does not " +
           		"support Text type (use Blob instead)");
-//          // property is a text
-//          // text could easily exceed maximum property size
-//          if (((Text)value).getValue().getBytes().length > propertyMaximumSize){
-//            // text is too big to fit into one property
-//            // need to split it by splitting the text from the front,
-//            // property name will remain the same for get concatenation
-//            int maxCharCount = propertyMaximumSize / 4; // allow for UTF-32
-//            String textHeadString = String.copyValueOf(
-//                ((Text)value).getValue().toCharArray(),
-//                0, maxCharCount); 
-//            String textTailString = String.copyValueOf(
-//                ((Text)value).getValue().toCharArray(),
-//                maxCharCount, 
-//                ((Text)value).getValue().length() - propertyMaximumSize);
-//            Text textHead = new Text(textHeadString);
-//            Text textTail = new Text(textTailString);
-//            size += propertyMaximumSize;
-//            size += propertyOverheadSize(property);
-//            // see if there is room to add the property
-//            if ( size <= MindashDatastoreService.MindashEntityMaximumSize) {
-//              // entity can accept the property
-//              shard.setProperty(property.getKey(), textHead);
-//              // replace the remainder of the property with headTail
-//              entity.setProperty(property.getKey(), textTail);
-//            }
-//            // entity is full either way
-//            return shard;
-//          } else {
-//            // text can fit into one property, do the normal thing
-//            size += ((Text)value).getValue().getBytes().length; // UTF-32
-//            size += propertyOverheadSize(property);
-//            // see if there is room to add the property
-//            if ( size <= MindashDatastoreService.MindashEntityMaximumSize ){
-//              // entity can accept the property
-//              shard.setProperty(property.getKey(), value);
-//              // remove the property so we don't go to it on the next iteration
-//              entity.removeProperty(property.getKey());
-//            } else {
-//              // entity is full, should be closed and a new entity started
-//              return shard;
-//            }
-//          }
         }
       } else {
         // find out the property's size
@@ -226,18 +190,18 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           // property is a string
           // make sure it is not too long
           if (((String) value).length() > 
-          DataTypeUtils.MAX_STRING_PROPERTY_LENGTH){
+              DataTypeUtils.MAX_STRING_PROPERTY_LENGTH){
             throw new IllegalArgumentException("String cannot be longer than " +
-                    DataTypeUtils.MAX_STRING_PROPERTY_LENGTH);
+                DataTypeUtils.MAX_STRING_PROPERTY_LENGTH);
           }
           // size of the string itself
           size += ((String) value).length() * 4; // allow for UTF-32
-          size += propertyOverheadSize(property);
+          size += getPropertyOverheadSize(property);
         } else if ( value instanceof Number || value instanceof Date){
           // property is a number or date (long)
           // size is max of 8 bytes
           size += 8;
-          size += propertyOverheadSize(property);
+          size += getPropertyOverheadSize(property);
         } else if ( value instanceof Key){
           // property is a Key
           // according to Jason from Google Entities can have up to 100 elements
@@ -247,7 +211,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           // we will use the KeyFactory.keyToString function to hack
           // a safe estimate for storing the key
           size += KeyFactory.keyToString((Key) value).length() * 4; // UTF-32
-          size += propertyOverheadSize(property);
+          size += getPropertyOverheadSize(property);
         } else if ( value instanceof User){
           // property is a User
           // estimating the size of user by getting the length of
@@ -255,7 +219,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           size += ((User)value).getAuthDomain().length() * 4 + 
           ((User)value).getEmail().length() * 4 +
           ((User)value).getNickname().length() * 4; // allow for UTF-32
-          size += propertyOverheadSize(property);
+          size += getPropertyOverheadSize(property);
         } else if ( value instanceof ShortBlob){
           // property is a shortBlob
           // make sure it is not too long
@@ -266,7 +230,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           }
           // size of the shortBlob
           size += ((ShortBlob)value).getBytes().length;
-          size += propertyOverheadSize(property);
+          size += getPropertyOverheadSize(property);
         } else if ( value instanceof Link){
           // property is a link
           // make sure it is not too long
@@ -277,7 +241,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           }
           // size of the link
           size += ((Link)value).getValue().length() * 4; // allow for UTF-32
-          size += propertyOverheadSize(property);
+          size += getPropertyOverheadSize(property);
         }
         // see if there is room to add the property
         if ( size <= MindashDatastoreService.MindashEntityMaximumSize ){
@@ -334,32 +298,112 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       for ( int i = 0; i < shardCount; i++){
         mdKeys.add(createMindashDatastoreKey(key, i));
       }
-      // TODO: make sure there is no more than 1000 (1GB??)
-      // get the shards
-      Map<Key, Entity> shards = datastore.get(mdKeys);
-      // assemble a single entity from the shards
-      // map may not be in order so iterate through keys we created
-      for (int i = 0; i < mdKeys.size(); i++){
-        Entity shard = shards.get(mdKeys.get(i));
-        // make sure we got the entity, if not, go get it again
-        shard = checkIfNullAndAttemptRetrieval(mdKeys.get(i), shard);
-        // if there are more than one property, we can safely assume
-        // that there are no split properties
-        if ( hasMultipleProperties(shard)){
-          result.setPropertiesFrom(shard);
-        } else {
-          // there will only ever be one split property to start with
-          // if this isn't just a single last non-split property
-          String propertyName = shard.getProperties().entrySet().iterator()
-              .next().getKey();
-          Object obj = shard.getProperty(propertyName);
-          // get the next shard
-          i++;
-          if ( i >= mdKeys.size() ){
-            // no more entities, set the property and return
-            result.setProperty(propertyName, obj);
-            return result;
+      // account for more than 1000 shards
+      if ( mdKeys.size() > 1000 ){
+        List<Key> retrieveChunk = null;
+        int index = 0;
+        int indexHigh = 0;
+        while ( index < mdKeys.size() ){
+          indexHigh = index + 999;
+          if ( indexHigh >= mdKeys.size() ){
+            indexHigh = mdKeys.size() - 1;
           }
+          retrieveChunk = mdKeys.subList(index, indexHigh + 1);
+          result = assembleEntity(result, retrieveChunk);
+          index = index + 1000;
+        }
+      } else {
+        result = assembleEntity(result, mdKeys);
+      }
+    } else {
+      // only one shard
+      result.setPropertiesFrom(e);
+    }
+    result.removeProperty(MindashDatastoreService.MindashShardCountLabel);
+    return result;
+  }
+
+  /**
+   * @param result the Entity to assemble
+   * @param mdKeys the keys of shards to use in assembly
+   * @return the assembled <code>result</code> 
+   * @throws EntityCorruptException
+   */
+  private Entity assembleEntity(Entity result, List<Key> mdKeys)
+      throws EntityCorruptException {
+    // get the shards
+    Map<Key, Entity> shards = datastore.get(mdKeys);
+    // assemble a single entity from the shards
+    // map may not be in order so iterate through keys we created
+    for (int i = 0; i < mdKeys.size(); i++){
+      Entity shard = shards.get(mdKeys.get(i));
+      // make sure we got the entity, if not, go get it again
+      shard = checkIfNullAndAttemptRetrieval(mdKeys.get(i), shard);
+      // if there are more than one property, we can safely assume
+      // that there are no split properties
+      if ( hasMultipleProperties(shard)){
+        result.setPropertiesFrom(shard);
+      } else {
+        // there will only ever be one split property to start with
+        // if this isn't just a single last non-split property
+        String propertyName = shard.getProperties().entrySet().iterator()
+            .next().getKey();
+        Object obj = shard.getProperty(propertyName);
+        // get the next shard
+        i++;
+        // TODO: handle the corner case when an entity is split between
+        //       shard 999 and shard 1000
+        if ( i >= mdKeys.size() ){
+          // no more entities, set the property and return
+          result.setProperty(propertyName, obj);
+          return result;
+        }
+        // check if the head of the blob is already in the result
+        // this is a corner case of shard 999 and shard 1000 blob split
+        obj = result.getProperty(propertyName);
+        if ( obj != null ){
+          Blob blob = (Blob) obj;
+          Blob tail = (Blob) shard.getProperty(propertyName);
+          blob = concatenateBlob(blob, tail);
+          obj = blob;
+          Entity next = shards.get(mdKeys.get(i));
+          next = checkIfNullAndAttemptRetrieval(mdKeys.get(i), next);
+          // see if next shard has the same property (tail)
+          while ( next.hasProperty(propertyName)){
+            // yes, found same property, part of the tail!
+            // this means that our obj is a blob that was split
+            // only blobs get split (otherwise how do you tell if it's a 
+            // Text or a Blob? more fields, we don't like that)
+            tail = (Blob) next.getProperty(propertyName);
+            blob = concatenateBlob(blob, tail);
+            // see if there are multiple properties
+//            if ( hasMultipleProperties(next) ){
+//              // since there are many properties, this is the final tail
+//              // set the property
+//              result.setProperty(propertyName, obj);
+//              // go on to the rest of the properties
+//              // remove the property to prevent overwriting the blob
+//              next.removeProperty(propertyName);
+//              // set the other properties
+//              result.setPropertiesFrom(next);
+//              // go on to the next shard
+//              i++;
+//              if ( i >= mdKeys.size() ){
+//                return result;
+//              }
+//            } else {
+              // go on to the next shard
+              i++;
+              if ( i >= mdKeys.size() ){
+                // no more entities, set the property and return
+                result.setProperty(propertyName, blob);
+                return result;
+              }
+              next = shards.get(mdKeys.get(i));
+              next = checkIfNullAndAttemptRetrieval(mdKeys.get(i), next);
+            //}
+          }
+        } else {
           Entity next = shards.get(mdKeys.get(i));
           next = checkIfNullAndAttemptRetrieval(mdKeys.get(i), next);
           // see if next shard has the same property (tail)
@@ -399,19 +443,15 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
               obj = blob;
             }
           }
-          // next did not have the same property and next exists
-          // commit the object we were suspecting of being a split object
-          // or if we just put together a blob
-          result.setProperty(propertyName, obj);
-          i--; // reset the count and let the loop do its thing
-        }
+        }    
+        // next did not have the same property and next exists
+        // commit the object we were suspecting of being a split object
+        // or if we just put together a blob
+        result.setProperty(propertyName, obj);
+        i--; // reset the count and let the loop do its thing
       }
-      return result;
-    } else {
-      // only one shard
-      result.setPropertiesFrom(e);
-      return result;
     }
+    return result;
   }
 
   /**
@@ -440,10 +480,10 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    * @param head 
    * @param tail
    */
-  private Blob concatenateBlob(Blob head, Blob tail) {
+  public Blob concatenateBlob(Blob head, Blob tail) {
     byte[] newBlob = Arrays.copyOf(head.getBytes(), 
         head.getBytes().length + tail.getBytes().length);
-    System.arraycopy(tail, 0, newBlob, head.getBytes().length,
+    System.arraycopy(tail.getBytes(), 0, newBlob, head.getBytes().length,
         tail.getBytes().length);
     // newBlob should now be concatenation of blob and tail
     return new Blob(newBlob);
@@ -457,9 +497,9 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    */
   private boolean hasMultipleProperties(Entity entity) {
     //remember shard 0 has an extra MindashShardCountLabel property
-    return (entity.getProperties().size() > 2 || 
-        (entity.hasProperty(MindashDatastoreService.MindashShardCountLabel) &&
-            entity.getProperties().size() > 3));
+    return (entity.hasProperty(MindashDatastoreService.MindashShardCountLabel)
+        && entity.getProperties().size() > 2) || 
+        (entity.getProperties().size() > 1 );
   }
 
   /**
@@ -540,16 +580,16 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       // datastore.put(tempEntity) will succeed unless something is horribly
       // wrong
       Entity tempEntity = new Entity(entity.getKind());
-      Transaction txn = datastore.beginTransaction();
+      //Transaction txn = datastore.beginTransaction();
       parentKey = datastore.put(tempEntity);
-      txn.commit();
+      //txn.commit();
       // clean up after ourselves and get rid of the placeholder entity so that
       // if the user calls datastore.get on the returned key bypassing
       // MindashDatastoreService, they will get nothing (this is to maintain
       // integrity of the program)
-      txn = datastore.beginTransaction();
+      //txn = datastore.beginTransaction();
       datastore.delete(parentKey);
-      txn.commit();
+      //txn.commit();
     }
     /**
      * As per javadoc, the following are the classes that can be safely stored
@@ -592,8 +632,8 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
     // store the count in the first shard
     shardsToStore.get(0).setProperty(
         MindashDatastoreService.MindashShardCountLabel, shardCount);
-    // TODO: do a 500 limit safe put
-    datastore.put(shardsToStore);
+    // 500 limit safe put
+    datastoreHelper.put(datastore, shardsToStore);
     // TODO: verify the shards got put
     return parentKey;
   }
@@ -615,7 +655,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       Object[] argObjects) throws InvocationTargetException {
       Constructor constructor;
       try {
-        constructor = targetClass.getConstructor(argClasses);
+        constructor = targetClass.getDeclaredConstructor(argClasses);
         constructor.setAccessible(true);
         return constructor.newInstance(argObjects);
       } catch (SecurityException e) {
