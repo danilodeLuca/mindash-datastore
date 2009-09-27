@@ -21,6 +21,7 @@ import java.util.Map;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.Entity;
 import com.google.appengine.api.datastore.Key;
+import com.google.appengine.api.datastore.Transaction;
 import com.google.inject.Singleton;
 import com.mindash.datastore.DatastoreHelper;
 
@@ -33,6 +34,13 @@ public class DatastoreHelperImpl implements DatastoreHelper {
 
   public void delete(DatastoreService datastore, List<Key> keys) {
     
+    delete(null, datastore, keys);
+    
+  }
+  
+  public void delete(Transaction txn, DatastoreService datastore, 
+      List<Key> keys){
+    
     if (keys.size() > 500) {
       List<Key> deleteChunk = null;
       int index = 0;
@@ -43,16 +51,32 @@ public class DatastoreHelperImpl implements DatastoreHelper {
           indexHigh = keys.size() - 1;
         }
         deleteChunk = keys.subList(index, indexHigh + 1);
-        datastore.delete(deleteChunk);
+        if (txn != null){
+          datastore.delete(txn, deleteChunk);
+        } else {
+          datastore.delete(deleteChunk);
+        }
         index = index + 500;
       }
     } else {
-      datastore.delete(keys);
+      if (txn != null){
+        datastore.delete(txn, keys);
+      } else {
+        datastore.delete(keys);
+      }
+
     }
     
   }
 
   public Map<Key, Entity> get(DatastoreService datastore, List<Key> keys) {
+    
+    return get(null, datastore, keys);
+    
+  }
+  
+  public Map<Key, Entity> get(Transaction txn, DatastoreService datastore,
+      List<Key> keys){
     
     Map<Key, Entity> result = null;
     if ( keys.size() > 1000 ){
@@ -65,7 +89,12 @@ public class DatastoreHelperImpl implements DatastoreHelper {
           indexHigh = keys.size() - 1;
         }
         retrieveChunk = keys.subList(index, indexHigh + 1);
-        Map<Key, Entity> chunk = datastore.get(retrieveChunk);
+        Map<Key,Entity> chunk = null;
+        if ( txn != null){
+          chunk = datastore.get(txn, retrieveChunk);
+        } else {
+          chunk = datastore.get(retrieveChunk);
+        }
         if ( result == null ){
           result = chunk;
         } else {
@@ -74,7 +103,11 @@ public class DatastoreHelperImpl implements DatastoreHelper {
         index = index + 1000;
       }
     } else {
-      result = datastore.get(keys);
+      if ( txn != null ){
+        result = datastore.get(txn, keys);
+      } else {
+        result = datastore.get(keys);
+      }
     }
 
     return result;
@@ -83,6 +116,13 @@ public class DatastoreHelperImpl implements DatastoreHelper {
 
   public List<Key> put(DatastoreService datastore, List<Entity> entities) {
 
+    return put(null, datastore, entities);
+    
+  }
+  
+  public List<Key> put(Transaction txn, DatastoreService datastore,
+      List<Entity> entities){
+   
     List<Key> result = null;
     
     if (entities.size() > 500) {
@@ -95,7 +135,12 @@ public class DatastoreHelperImpl implements DatastoreHelper {
           indexHigh = entities.size() - 1;
         }
         commitChunk = entities.subList(index, indexHigh + 1);
-        List<Key> chunk = datastore.put(commitChunk);
+        List<Key> chunk = null;
+        if ( txn != null ){
+          chunk = datastore.put(txn,commitChunk);
+        } else {
+          chunk = datastore.put(commitChunk);
+        }
         if ( result == null ){
           result = chunk;
         } else {
@@ -104,7 +149,11 @@ public class DatastoreHelperImpl implements DatastoreHelper {
         index = index + 500;
       }
     } else {
-      result = datastore.put(entities);
+      if ( txn != null ){
+        result = datastore.put(txn, entities);
+      } else {
+        result = datastore.put(entities);
+      }
     }
     
 //    if ( result.size() != entities.size() ){
