@@ -79,9 +79,7 @@ public interface MindashDatastoreService {
 	
 	public Key put(Transaction txn, Entity entity);
 	
-	// TODO: implement
 	public List<Key> put(Transaction txn, Iterable<Entity> entities);
 	
-	// TODO: implement
 	public List<Key> put(Iterable<Entity> entities);
 }
