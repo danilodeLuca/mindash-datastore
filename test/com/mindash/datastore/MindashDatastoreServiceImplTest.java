@@ -918,6 +918,36 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase
     verify(datastore, times(1)).put(argThat(new IsListOfEntities(10)));
   }
   
+  class IsListOfIncompleteKeyEntities extends ArgumentMatcher<Entity>{
+    public IsListOfIncompleteKeyEntities(){
+      super();
+    }
+    @SuppressWarnings("unchecked")
+    public boolean matches(Object list){
+      if (Iterable.class.isInstance(list)){
+        List<Entity> l = (List<Entity>) list;
+        for (Entity e : l){
+          if ( e.getKey().isComplete() ){
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    }
+  }
+  
+//  @Test
+//  public void putEntitesIterableShouldPreemptivelySaveEntitiesToCompleteIncompleteKeys(){
+//    Entity e1 = new Entity("testKind");
+//    Entity e2 = new Entity("testKind2");
+//    List<Entity> entities = new ArrayList<Entity>(2);
+//    entities.add(e1);
+//    entities.add(e2);
+//    List<Key> keys = md.put((Iterable<Entity>) entities);
+//    verify(datastore).put(argThat(new IsListOfIncompleteKeyEntities()));
+//  }
+  
 //  @Test
 //  public void testMindashDatastoreServiceImplPutTransactionEntity(){
 //    assertTrue("Not implemented", false);

@@ -729,11 +729,101 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public List<Key> put(Transaction txn, Iterable<Entity> entities) {
-    throw new NotImplementedException();
+    // check if keys are complete
+    List<Entity> incompleteKeyEntities = new ArrayList<Entity>();
+    List<Entity> originalCompleteEntities = new ArrayList<Entity>();
+    for ( Entity e : entities ){
+      if ( !e.getKey().isComplete() ){
+        incompleteKeyEntities.add(e);
+      } else {
+        originalCompleteEntities.add(e);
+      }
+    }
+    List<Key> completedKeys = null;
+    if ( !incompleteKeyEntities.isEmpty() ){
+      if ( txn != null ){
+        completedKeys = 
+            datastoreHelper.put(txn, datastore, incompleteKeyEntities);
+      } else {
+        completedKeys = datastoreHelper.put(datastore, incompleteKeyEntities);
+      }
+    }
+    // because we lost the relationship between the keys and the entities
+    // we need to retrieve them from the datastore
+    Map<Key,Entity> completeKeyEntities = null;
+    if ( !completedKeys.isEmpty() ){
+      if ( txn != null ){
+        completeKeyEntities = 
+            datastoreHelper.get(txn, datastore, completedKeys);
+      } else {
+        completeKeyEntities = datastoreHelper.get(datastore, completedKeys);
+      }
+    }
+    // we now have two collections to save at this point
+    // originalCompleteEntities and completeKeyEntities
+    // we won't be combining them for performance reasons
+    
+    // delete from datastore to maintain program integrity
+    if ( !completedKeys.isEmpty() ){
+      if ( txn != null ){
+        datastore.delete(txn, completedKeys);
+      } else {
+        datastore.delete(completedKeys);
+      }
+    }
+    
+    ArrayList<Entity> shardsToStore = new ArrayList<Entity>();
+    
+    // iterate through both collections to generate shards to store
+    // originalCompleteEntities
+    for ( Entity entity : originalCompleteEntities ){
+      generateStorableEntityShards(shardsToStore, entity);
+    }
+    // completeKeyEntities
+    Iterator<Entry<Key,Entity>> i = completeKeyEntities.entrySet().iterator();
+    while ( i.hasNext() ){
+      Entity entity = i.next().getValue();
+      generateStorableEntityShards(shardsToStore, entity);
+    }
+    
+    return datastoreHelper.put(txn, datastore, shardsToStore);
+     
+  }
+
+  /**
+   * Utility method that 
+   * @param shardsToStore generated shards will be added to this
+   * @param entity the entity to generate shards from
+   */
+  private void generateStorableEntityShards(ArrayList<Entity> shardsToStore,
+      Entity entity) {
+    // shard 0 is special case to store the shard count
+    Entity shard0 = createMindashEntityShard(entity.getKey(), 0);
+    shard0 = generateStorableEntityShard(entity, shard0);
+    if (!entity.getProperties().isEmpty()){
+      ArrayList<Entity> shardChunkToStore = new ArrayList<Entity>();
+      int thisShard = 1;
+      while (true){
+        Entity shard = createMindashEntityShard(entity.getKey(), thisShard);
+        shardChunkToStore.add(generateStorableEntityShard(entity, shard));
+        thisShard++;
+        if (entity.getProperties().isEmpty()){
+          break;
+        }
+      }
+      shard0.setProperty(
+          MindashDatastoreService.MindashShardCountLabel, 
+          shardChunkToStore.size() + 1);
+      shardsToStore.addAll(shardChunkToStore);
+    } else {
+      shard0.setProperty(
+          MindashDatastoreService.MindashShardCountLabel, 1);
+    }
+    shardsToStore.add(shard0);
   }
 
   public List<Key> put(Iterable<Entity> entities) {
-    throw new NotImplementedException();
+    return put(null, entities);
   }
   
   @SuppressWarnings("unchecked")
