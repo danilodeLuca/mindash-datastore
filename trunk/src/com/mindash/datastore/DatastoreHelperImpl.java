@@ -33,9 +33,7 @@ import com.mindash.datastore.DatastoreHelper;
 public class DatastoreHelperImpl implements DatastoreHelper {
 
   public void delete(DatastoreService datastore, List<Key> keys) {
-    
     delete(null, datastore, keys);
-    
   }
   
   public void delete(Transaction txn, DatastoreService datastore, 
@@ -70,9 +68,7 @@ public class DatastoreHelperImpl implements DatastoreHelper {
   }
 
   public Map<Key, Entity> get(DatastoreService datastore, List<Key> keys) {
-    
     return get(null, datastore, keys);
-    
   }
   
   public Map<Key, Entity> get(Transaction txn, DatastoreService datastore,
@@ -115,9 +111,7 @@ public class DatastoreHelperImpl implements DatastoreHelper {
   }
 
   public List<Key> put(DatastoreService datastore, List<Entity> entities) {
-
     return put(null, datastore, entities);
-    
   }
   
   public List<Key> put(Transaction txn, DatastoreService datastore,
