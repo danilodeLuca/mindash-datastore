@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -362,12 +363,28 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
     } else {
       shards = datastore.get(mdKeys);
     }
+    return assembleEntityFromKeysAndEntityMap(txn, result, mdKeys, shards, true);
+  }
+
+  /**
+   * @param txn
+   * @param result
+   * @param mdKeys
+   * @param shards
+   * @return
+   * @throws EntityCorruptException
+   */
+  private Entity assembleEntityFromKeysAndEntityMap(Transaction txn,
+      Entity result, List<Key> mdKeys, Map<Key, Entity> shards,
+      Boolean doubleCheckDatastore)
+      throws EntityCorruptException {
     // assemble a single entity from the shards
     // map may not be in order so iterate through keys we created
     for (int i = 0; i < mdKeys.size(); i++){
       Entity shard = shards.get(mdKeys.get(i));
       // make sure we got the entity, if not, go get it again
-      shard = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), shard);
+      shard = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), shard,
+          doubleCheckDatastore);
       // if there are more than one property, we can safely assume
       // that there are no split properties
       if ( hasMultipleProperties(shard)){
@@ -396,7 +413,8 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
           blob = concatenateBlob(blob, tail);
           obj = blob;
           Entity next = shards.get(mdKeys.get(i));
-          next = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), next);
+          next = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), next,
+              doubleCheckDatastore);
           // see if next shard has the same property (tail)
           while ( next.hasProperty(propertyName)){
             // yes, found same property, part of the tail!
@@ -429,12 +447,14 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
                 return result;
               }
               next = shards.get(mdKeys.get(i));
-              next = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), next);
+              next = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), next,
+                  doubleCheckDatastore);
             //}
           }
         } else {
           Entity next = shards.get(mdKeys.get(i));
-          next = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), next);
+          next = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), next,
+              doubleCheckDatastore);
           // see if next shard has the same property (tail)
           while ( next.hasProperty(propertyName)){
             // yes, found same property, part of the tail!
@@ -468,7 +488,8 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
                 return result;
               }
               next = shards.get(mdKeys.get(i++));
-              next = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), next);
+              next = checkIfNullAndAttemptRetrieval(txn, mdKeys.get(i), next,
+                  doubleCheckDatastore);
               obj = blob;
             }
           }
@@ -490,9 +511,9 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    * @throws EntityCorruptException
    */
   private Entity checkIfNullAndAttemptRetrieval(Transaction txn, Key key,
-      Entity shard)
+      Entity shard, Boolean doubleCheckDatastore)
           throws EntityCorruptException {
-    if ( shard == null ){
+    if ( shard == null && doubleCheckDatastore){
       try {
         if ( txn != null ){
           shard = datastore.get(txn, key);
@@ -505,6 +526,11 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
         throw new EntityCorruptException("One of the Entity shards was not " +
         		"found. The entity is corrupt and cannot be retrieved");
       }
+    } else if ( shard == null){
+      // this is very bad, we lost the integrity of the data
+      // let the user know
+      throw new EntityCorruptException("One of the Entity shards was not " +
+          "found. The entity is corrupt and cannot be retrieved");
     }
     return shard;
   }
@@ -607,12 +633,69 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
     return result;
   }
 
-  public Map<Key, Entity> get(Transaction txn, Iterable<Key> keys) {
-    throw new NotImplementedException();
+  public Map<Key, Entity> get(Transaction txn, Iterable<Key> keys)
+      throws EntityCorruptException {
+    
+    // assemble 0th shards keys
+    List<Key> shards0thKeys = new ArrayList<Key>();
+    for (Key k : keys){
+      shards0thKeys.add(createMindashDatastoreKey(k, 0));
+    }
+    // get all 0th shards
+    Map<Key,Entity> shards0th = null;
+    if ( txn != null ){
+      shards0th = datastoreHelper.get(txn, datastore, shards0thKeys);
+    } else {
+      shards0th = datastoreHelper.get(datastore, shards0thKeys);
+    }
+    // store shard count information
+    Map<Key,Integer> shardCounts = new HashMap<Key,Integer>(shards0th.size());
+    Iterator<Entry<Key,Entity>> iterator = shards0th.entrySet().iterator();
+    while (iterator.hasNext()){
+      Entry<Key,Entity> e = iterator.next();
+      shardCounts.put(e.getKey(), (Integer) e.getValue().getProperty(
+          MindashDatastoreService.MindashShardCountLabel));
+    }
+    // create keys for all shards to get
+    // the tradeoff is that we will iterate through things in memory instead
+    // of doing a separate datastore.get call for each multi-shard entity
+    List<Key> allShardsToGet = new ArrayList<Key>();
+    // key reference is used later to reassemble the shards from a map that
+    // has no sequentiality guarantees whatsoever
+    Map<Key,List<Key>> keyReference = 
+        new HashMap<Key,List<Key>>(shards0th.size());
+    for (Key k : keys){
+      List<Key> shardKeys = new ArrayList<Key>(shardCounts.get(k));
+      for ( int i = 0; i < shardCounts.get(k); i++ ){
+        Key shardKey = createMindashDatastoreKey(k, i);
+        allShardsToGet.add(shardKey);
+        shardKeys.add(shardKey);
+      }
+      keyReference.put(k, shardKeys);
+    }
+    
+    Map<Key, Entity> allShards = null;
+    if ( txn != null ){
+      allShards = datastoreHelper.get(txn, datastore, allShardsToGet);
+    } else {
+      allShards = datastoreHelper.get(datastore, allShardsToGet);
+    }
+    
+    // assemble entities and put them in results
+    Map<Key, Entity> results = new HashMap<Key, Entity>(shards0thKeys.size());
+    for (Key k : keys){
+      Entity result = constructEntity(k);
+      assembleEntityFromKeysAndEntityMap(txn, result, keyReference.get(k),
+          allShards, false);
+      result.removeProperty(MindashDatastoreService.MindashShardCountLabel);
+      results.put(k, result);
+    }
+    
+    return results;
   }
 
-  public Map<Key, Entity> get(Iterable<Key> keys) {
-    throw new NotImplementedException();
+  public Map<Key, Entity> get(Iterable<Key> keys) throws EntityCorruptException {
+    return get(null, keys);
   }
 
   public Collection<Transaction> getActiveTransactions() {

@@ -57,11 +57,10 @@ public interface MindashDatastoreService {
 	public Entity get(Transaction txn, Key key) throws EntityNotFoundException,
 	    EntityCorruptException;
 	
-	// TODO: implement
-	public Map<Key, Entity> get(Transaction txn, Iterable<Key> keys);
+	public Map<Key, Entity> get(Transaction txn, Iterable<Key> keys) 
+	    throws EntityCorruptException;
 	
-	// TODO: implement
-	public Map<Key, Entity> get(Iterable<Key> keys);
+	public Map<Key, Entity> get(Iterable<Key> keys) throws EntityCorruptException;
 	
 	public Collection<Transaction> getActiveTransactions();
 	
