@@ -34,7 +34,6 @@ import com.google.appengine.api.datastore.Transaction;
  */
 public interface MindashDatastoreService {
   
-  public static String MindashKindLayerLabel = "mdd";
   public static String MindashNamePrefixLabel = "mdd";
   public static String MindashShardCountLabel = "mddx";
   public static int MindashInitialEntityOverheadSize = 1024;
@@ -68,10 +67,8 @@ public interface MindashDatastoreService {
 	
 	public Transaction getCurrentTransaction(Transaction txn);
 	
-	// TODO: implement
 	public PreparedQuery prepare(Query query);
 	
-	// TODO: implement
 	public PreparedQuery prepare(Transaction txn, Query query);
 	
 	public Key put(Entity entity);
