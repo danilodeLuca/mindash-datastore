@@ -27,13 +27,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
-
 import com.google.appengine.api.datastore.Blob;
 import com.google.appengine.api.datastore.DataTypeUtils;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.Entity;
 import com.google.appengine.api.datastore.EntityNotFoundException;
+import com.google.appengine.api.datastore.FetchOptions;
 import com.google.appengine.api.datastore.Key;
 import com.google.appengine.api.datastore.KeyFactory;
 import com.google.appengine.api.datastore.Link;
@@ -94,7 +93,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   public static Key createMindashDatastoreKey(Key key, int shard){
     return KeyFactory.createKey(
         key,
-        MindashDatastoreService.MindashKindLayerLabel,
+        key.getKind(),
         createMindashDatastoreKeyName(shard));
   }
   
@@ -107,7 +106,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    */
   public Entity createMindashEntityShard(Key parentKey, int thisShard) {
     return new Entity(
-        MindashDatastoreService.MindashKindLayerLabel,
+        parentKey.getKind(),
         MindashDatastoreServiceImpl.createMindashDatastoreKeyName(thisShard),
         parentKey);
   }
@@ -711,11 +710,15 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
   }
 
   public PreparedQuery prepare(Query query) {
-    throw new NotImplementedException();
+    //throw new NotImplementedException();
+    return new MindashPreparedQueryImpl(datastore, this, query, null);
   }
 
   public PreparedQuery prepare(Transaction txn, Query query) {
-    throw new NotImplementedException();
+    //throw new NotImplementedException();
+    return new MindashPreparedQueryImpl(datastore, this, query, txn);
+    // because of the way the data is stored, the queries do not need to be
+    // modified, only the results need to be processed
   }
 
   public Key put(Entity entity) {
@@ -945,6 +948,119 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
         // human figure it out.
         throw new InvocationTargetException(e);
       }
+  }
+  
+  public static class MindashPreparedQueryImpl implements MindashPreparedQuery {
+    private DatastoreService datastore;
+    private MindashDatastoreService mindashDatastore;
+    private Query query;
+    private Transaction txn;
+    
+    public MindashPreparedQueryImpl(DatastoreService datastore, 
+        MindashDatastoreService mindashDatastore, Query query,
+        Transaction txn){
+      this.datastore = datastore;
+      this.mindashDatastore = mindashDatastore;
+      this.query = query;
+      this.txn = txn;
+    }
+    
+    /**
+     * @return
+     */
+    private List<Entity> retrieveSortedEntities(FetchOptions fetchOptions) {
+      if ( fetchOptions == null){
+        fetchOptions = FetchOptions.Builder.withLimit(1000);
+      }
+      // we want only keys
+      query.setKeysOnly();
+      List<Entity> results = null;
+      if ( txn != null ){
+        results = datastore.prepare(txn, query).asList(fetchOptions);
+      } else {
+        results = datastore.prepare(query).asList(fetchOptions);
+      }
+      // pull out the parent from each one, retrieve the entries, put them
+      // in the required order and deliver
+      List<Key> entitiesToGet = new ArrayList<Key>(results.size());
+      for ( Entity e : results ){
+        entitiesToGet.add(e.getParent());
+      }
+      Map<Key, Entity> unsortedEntities = null;
+      try {
+        if ( txn != null ){
+          unsortedEntities = mindashDatastore.get(txn, entitiesToGet);
+        } else {
+          unsortedEntities = mindashDatastore.get(entitiesToGet);
+        }
+      } catch (EntityCorruptException e1) {
+        // TODO don't know how to handle this yet
+        e1.printStackTrace();
+      }
+      // created sorted list
+      List<Entity> sortedEntities = 
+          new ArrayList<Entity>(unsortedEntities.size());
+      for ( Key k : entitiesToGet ){
+        sortedEntities.add(unsortedEntities.get(k));
+      }
+      return sortedEntities;
+    }
+
+    @Override
+    public Iterable<Entity> asIterable() {
+      return retrieveSortedEntities(null);
+    }
+
+    @Override
+    public Iterable<Entity> asIterable(FetchOptions fetchOptions) {
+      return retrieveSortedEntities(fetchOptions);
+    }
+
+    @Override
+    public Iterator<Entity> asIterator() {
+      return retrieveSortedEntities(null).iterator();
+    }
+
+    @Override
+    public Iterator<Entity> asIterator(FetchOptions fetchOptions) {
+      return retrieveSortedEntities(fetchOptions).iterator();
+    }
+
+    @Override
+    public List<Entity> asList(FetchOptions fetchOptions) {
+      return retrieveSortedEntities(fetchOptions);
+    }
+
+    @Override
+    public Entity asSingleEntity() throws TooManyResultsException {
+      // we want only the key
+      query.setKeysOnly();
+      Entity result = null;
+      if ( txn != null ){
+        result = datastore.prepare(txn, query).asSingleEntity();
+      } else {
+        result = datastore.prepare(query).asSingleEntity();
+      }
+      try {
+        result = mindashDatastore.get(result.getParent());
+      } catch (EntityNotFoundException e) {
+        // TODO don't know how to deal with this yet
+        e.printStackTrace();
+      } catch (EntityCorruptException e) {
+        // TODO don't know how to deal with this yet
+        e.printStackTrace();
+      }
+      return result;
+    }
+
+    @Override
+    public int countEntities() {
+      if ( txn != null ){
+        return datastore.prepare(txn, query).countEntities();
+      } else {
+        return datastore.prepare(query).countEntities();
+      }
+    }
   }
 
 }

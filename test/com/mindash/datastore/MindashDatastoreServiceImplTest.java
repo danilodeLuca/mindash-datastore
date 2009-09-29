@@ -55,7 +55,6 @@ import com.google.appengine.api.datastore.EntityNotFoundException;
 import com.google.appengine.api.datastore.Key;
 import com.google.appengine.api.datastore.KeyFactory;
 import com.google.appengine.api.datastore.Link;
-import com.google.appengine.api.datastore.Query;
 import com.google.appengine.api.datastore.ShortBlob;
 import com.google.appengine.api.datastore.Text;
 import com.google.appengine.api.datastore.Transaction;
@@ -86,7 +85,6 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase
     b.bind(DatastoreHelper.class).to(DatastoreHelperImpl.class);
     b.bind(DatastoreService.class).toInstance(mock(DatastoreService.class));
     b.bind(MindashDatastoreService.class).to(MindashDatastoreServiceImpl.class);
-   
   }
   
   @Inject @Unit MindashDatastoreService md;
@@ -155,9 +153,8 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase
       MindashDatastoreServiceImpl.createMindashDatastoreKey(originalKey, shard);
     assertTrue("MindashDatastoreKey should have original key as ancestor",
         createdKey.getParent().equals(originalKey));
-    assertTrue("MindashDatastoreKey should have kind of MindashKindLayerLabel",
-        createdKey.getKind()
-            .equals(MindashDatastoreService.MindashKindLayerLabel));
+    assertTrue("MindashDatastoreKey should have kind of the ancestor",
+        createdKey.getKind().equals(originalKey.getKind()));
     assertTrue("MindashDatastoreKey should have name created by " +
     		"createMindashDatastoreKeyName()",
     		createdKey.getName().equals(
@@ -169,8 +166,8 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase
     Key originalKey = KeyFactory.createKey("testKind", "testKey");
     int shard = 3;
     Entity result = mdImpl.createMindashEntityShard(originalKey, shard);
-    assertTrue("Created shard should have kind of MindashKindLayerLabel",
-        result.getKind().equals(MindashDatastoreService.MindashKindLayerLabel));
+    assertTrue("Created shard should have kind of the ancestor",
+        result.getKind().equals(originalKey.getKind()));
     assertTrue("Created shard should have name created by " +
         "createMindashDatastoreKeyName()",
         result.getKey().getName().equals(
@@ -833,6 +830,8 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase
   @Test
   public void putEntityNoKeyShouldPreemptivelySaveEntityToCompleteKey(){
     Entity entity = new Entity("testKind");
+    when(datastore.put(argThat(new IsEntityWithIncompleteKey())))
+        .thenReturn(KeyFactory.createKey("testKind", 1));
     md.put(entity);
     verify(datastore).put(argThat(new IsEntityWithIncompleteKey()));
   }
@@ -840,6 +839,8 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase
   @Test
   public void putEntityShouldCallGenerateStorableEntityShard(){
     Entity entity = new Entity("testKind");
+    when(datastore.put(argThat(new IsEntityWithIncompleteKey())))
+        .thenReturn(KeyFactory.createKey("testKind", 1));
     MindashDatastoreServiceImpl mdSpy = (MindashDatastoreServiceImpl) spy(md);
     mdSpy.put(entity);
     verify(mdSpy).generateStorableEntityShard(any(Entity.class), 
@@ -865,7 +866,7 @@ public class MindashDatastoreServiceImplTest extends LocalDatastoreTestCase
             e.getKey().getParent().getKind() == null ||
             !e.getKey().getParent().getKind().equals(testKind) ||
             !e.getKey().getKind()
-                .equals(MindashDatastoreService.MindashKindLayerLabel) ||
+                .equals(testKind) ||
             e.getKey().getName() == null ||
             !e.getKey().getName().matches(
                 MindashDatastoreService.MindashNamePrefixLabel + ".*")){
