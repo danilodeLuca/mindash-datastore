@@ -950,7 +950,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       }
   }
   
-  public static class MindashPreparedQueryImpl implements MindashPreparedQuery {
+  public static class MindashPreparedQueryImpl implements PreparedQuery {
     private DatastoreService datastore;
     private MindashDatastoreService mindashDatastore;
     private Query query;
