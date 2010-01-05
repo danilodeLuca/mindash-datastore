@@ -20,6 +20,7 @@ import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.google.inject.AbstractModule;
 import com.mindash.datastore.impl.DatastoreHelperImpl;
 import com.mindash.datastore.impl.MindashDatastoreServiceImpl;
+import com.mindash.datastore.impl.MindashPreparedQueryImpl;
 
 /**
  * Google Guice Mindash Datastore Module for dependency injection.
@@ -34,6 +35,7 @@ public class MindashDatastoreModule extends AbstractModule {
     bind(DatastoreService.class).toInstance(
         DatastoreServiceFactory.getDatastoreService());
     bind(MindashDatastoreService.class).to(MindashDatastoreServiceImpl.class);
+    bind(MindashPreparedQuery.class).to(MindashPreparedQueryImpl.class);
   }
 
 }

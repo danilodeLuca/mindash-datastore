@@ -22,7 +22,7 @@ import java.util.Map;
 import com.google.appengine.api.datastore.Entity;
 import com.google.appengine.api.datastore.EntityNotFoundException;
 import com.google.appengine.api.datastore.Key;
-import com.google.appengine.api.datastore.PreparedQuery;
+import com.google.appengine.api.datastore.KeyRange;
 import com.google.appengine.api.datastore.Query;
 import com.google.appengine.api.datastore.Transaction;
 
@@ -39,6 +39,10 @@ public interface MindashDatastoreService {
   public static int MindashInitialEntityOverheadSize = 1024;
   public static int MindashEntityMaximumSize = 1024 * 1024;
   public static int MindashAssumedPropertyOverhead = 128;
+  
+  public KeyRange allocateIds(Key parent, String kind, long num);
+  
+  public KeyRange allocateIds(String kind, long num);
   
 	public Transaction beginTransaction();
 	
@@ -67,9 +71,9 @@ public interface MindashDatastoreService {
 	
 	public Transaction getCurrentTransaction(Transaction txn);
 	
-	public PreparedQuery prepare(Query query);
+	public MindashPreparedQuery prepare(Query query);
 	
-	public PreparedQuery prepare(Transaction txn, Query query);
+	public MindashPreparedQuery prepare(Transaction txn, Query query);
 	
 	public Key put(Entity entity);
 	
