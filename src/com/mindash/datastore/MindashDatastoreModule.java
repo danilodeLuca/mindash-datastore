@@ -18,6 +18,8 @@ package com.mindash.datastore;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.google.inject.AbstractModule;
+import com.mindash.datastore.impl.DatastoreHelperImpl;
+import com.mindash.datastore.impl.MindashDatastoreServiceImpl;
 
 /**
  * Google Guice Mindash Datastore Module for dependency injection.
