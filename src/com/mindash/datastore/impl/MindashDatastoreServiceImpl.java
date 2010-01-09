@@ -578,6 +578,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
 
   @Override
   public Key put(Transaction txn, Entity entity) {
+    int numOfShardsInDatastore = 0;
     /**
      * SOME NOTES: entity will have indexable and non-indexable properties. The
      * indexable properties have maximum sizes, so they can be dealt with in a
@@ -589,8 +590,26 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
      */
     Key parentKey = null;
     // check if the key is complete
-    if (entity.getKey().getId() != 0 || entity.getKey().getName() != null) {
+    if (entity.getKey().isComplete()) {
       parentKey = entity.getKey();
+      // check how many shards exist
+      Entity tempEntity = null;
+      Key mindashKey = createMindashDatastoreKey(parentKey, 0);
+      try {
+        if (txn != null) {
+          tempEntity = datastore.get(txn, mindashKey);
+        } else {
+          tempEntity = datastore.get(mindashKey);
+        }
+        Object property =
+            tempEntity
+                .getProperty(MindashDatastoreService.MindashShardCountLabel);
+        if (property != null) {
+          numOfShardsInDatastore = (Integer) property;
+        }
+      } catch (EntityNotFoundException e) {
+        // entity doesn't exist, won't have to delete any shards
+      }
     } else {
       // "strip" the entity just to get a parent key (create a tempEntity that
       // will get the key the entity would get if it was saved), this is
@@ -655,42 +674,48 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
         MindashDatastoreService.MindashShardCountLabel, shardCount);
     // 500 limit safe put
     datastoreHelper.put(txn, datastore, shardsToStore);
+    // check if we need to delete any old shards in the datastore
+    if (numOfShardsInDatastore > shardCount) {
+      // create the keys of deprecated shards to delete
+      ArrayList<Key> shardsToDelete = new ArrayList<Key>();
+      for (int i = shardCount; i < numOfShardsInDatastore; i++) {
+        shardsToDelete.add(createMindashDatastoreKey(parentKey, i));
+      }
+      // 500 limit safe delete
+      datastoreHelper.delete(txn, datastore, shardsToDelete);
+    }
     // TODO: verify the shards got put
     return parentKey;
   }
 
+  // FIXME[Tristan]: test datastore cleanup delete during puts!
   @Override
   public List<Key> put(Transaction txn, Iterable<Entity> entities) {
     // check if keys are complete
     List<Entity> incompleteKeyEntities = new ArrayList<Entity>();
     List<Entity> originalCompleteEntities = new ArrayList<Entity>();
+    List<Key> originalCompleteKeys = new ArrayList<Key>();
     for (Entity e : entities) {
       if (!e.getKey().isComplete()) {
         incompleteKeyEntities.add(e);
       } else {
+        originalCompleteKeys.add(e.getKey());
         originalCompleteEntities.add(e);
       }
     }
     List<Key> completedKeys = null;
     if (!incompleteKeyEntities.isEmpty()) {
-      if (txn != null) {
-        completedKeys =
-            datastoreHelper.put(txn, datastore, incompleteKeyEntities);
-      } else {
-        completedKeys = datastoreHelper.put(datastore, incompleteKeyEntities);
-      }
+      completedKeys =
+          datastoreHelper.put(txn, datastore, incompleteKeyEntities);
     }
+
     // because we lost the relationship between the keys and the entities
     // we need to retrieve them from the datastore
     Map<Key, Entity> completeKeyEntities = null;
     if (!completedKeys.isEmpty()) {
-      if (txn != null) {
-        completeKeyEntities =
-            datastoreHelper.get(txn, datastore, completedKeys);
-      } else {
-        completeKeyEntities = datastoreHelper.get(datastore, completedKeys);
-      }
+      completeKeyEntities = datastoreHelper.get(txn, datastore, completedKeys);
     }
+
     // we now have two collections to save at this point
     // originalCompleteEntities and completeKeyEntities
     // we won't be combining them for performance reasons
@@ -706,19 +731,61 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
 
     ArrayList<Entity> shardsToStore = new ArrayList<Entity>();
 
+    // original and new entity sizes
+    Map<Key, Integer> originalSizes = new HashMap<Key, Integer>();
+    Map<Key, Integer> newSizes = new HashMap<Key, Integer>();
+
+    // get already existing entity sizes
+    if (!originalCompleteKeys.isEmpty()) {
+      ArrayList<Key> original0ShardKeys = new ArrayList<Key>();
+      for (Key key : originalCompleteKeys) {
+        original0ShardKeys.add(createMindashDatastoreKey(key, 0));
+      }
+      Map<Key, Entity> entitiesInDatastore =
+          datastoreHelper.get(txn, datastore, original0ShardKeys);
+      for (Entry<Key, Entity> entry : entitiesInDatastore.entrySet()) {
+        Object property =
+            entry.getValue().getProperty(
+                MindashDatastoreService.MindashShardCountLabel);
+        if (property != null) {
+          originalSizes.put(entry.getKey(), (Integer) property);
+        }
+      }
+    }
+
     // iterate through both collections to generate shards to store
     // originalCompleteEntities
     for (Entity entity : originalCompleteEntities) {
-      generateStorableEntityShards(shardsToStore, entity);
+      generateStorableEntityShards(shardsToStore, entity, newSizes);
     }
     // completeKeyEntities
     Iterator<Entry<Key, Entity>> i = completeKeyEntities.entrySet().iterator();
     while (i.hasNext()) {
       Entity entity = i.next().getValue();
-      generateStorableEntityShards(shardsToStore, entity);
+      generateStorableEntityShards(shardsToStore, entity, null);
     }
 
-    return datastoreHelper.put(txn, datastore, shardsToStore);
+    List<Key> keys = datastoreHelper.put(txn, datastore, shardsToStore);
+
+    // delete any excess shards
+    ArrayList<Key> shardsToDelete = new ArrayList<Key>();
+    int orig = 0;
+    int newSize = 0;
+    for (Key key : originalCompleteKeys) {
+      orig = originalSizes.get(key);
+      newSize = newSizes.get(key);
+      if (orig > newSize) {
+        for (int j = newSize; j < orig; j++) {
+          shardsToDelete.add(createMindashDatastoreKey(key, j));
+        }
+      }
+    }
+
+    if (!shardsToDelete.isEmpty()) {
+      datastoreHelper.delete(txn, datastore, shardsToDelete);
+    }
+
+    return keys;
 
   }
 
@@ -951,7 +1018,7 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
    * @param entity the entity to generate shards from
    */
   private void generateStorableEntityShards(ArrayList<Entity> shardsToStore,
-      Entity entity) {
+      Entity entity, Map<Key, Integer> shardsCountMap) {
     // shard 0 is special case to store the shard count
     Entity shard0 = createMindashEntityShard(entity.getKey(), 0);
     shard0 = generateStorableEntityShard(entity, shard0);
@@ -968,6 +1035,9 @@ public class MindashDatastoreServiceImpl implements MindashDatastoreService {
       }
       shard0.setProperty(MindashDatastoreService.MindashShardCountLabel,
           shardChunkToStore.size() + 1);
+      if (shardsCountMap != null) {
+        shardsCountMap.put(entity.getKey(), shardChunkToStore.size() + 1);
+      }
       shardsToStore.addAll(shardChunkToStore);
     } else {
       shard0.setProperty(MindashDatastoreService.MindashShardCountLabel, 1);
